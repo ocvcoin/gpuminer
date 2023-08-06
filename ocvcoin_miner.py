@@ -462,7 +462,7 @@ def ocl_mine_ocvcoin(block_template, address):
     output_buf = target_diff_buf.empty_like_this()
 
     
-    last_time_stamp = time.time()
+    
     
     calc_count = 0    
     
@@ -479,7 +479,7 @@ def ocl_mine_ocvcoin(block_template, address):
     
         try:
 
-
+            last_time_stamp = time.time()
             
             calc_count = calc_count + calc_per_time                       
             
@@ -512,16 +512,16 @@ def ocl_mine_ocvcoin(block_template, address):
 
             current_timestamp = time.time()
             diff = current_timestamp - last_time_stamp
-            if True:
-                hash_rate = int((calc_count) / diff)
-                
-                
-                if MAX_HASHRATE < hash_rate:
-                    MAX_HASHRATE = hash_rate
-                print("{} hash/s, max {}".format(hash_rate,MAX_HASHRATE))
-                
-                last_time_stamp = current_timestamp 
-                calc_count = 0
+            
+            hash_rate = int((calc_count) / diff)
+            
+            
+            if MAX_HASHRATE < hash_rate:
+                MAX_HASHRATE = hash_rate
+            print("{} hash/s, max {}".format(hash_rate,MAX_HASHRATE))
+            
+             
+            calc_count = 0
      
         
 
@@ -535,7 +535,9 @@ def ocl_mine_ocvcoin(block_template, address):
             
             if (current_step*global_work_size + global_work_size) > 0xFFFFFF:
                 print("no more nonce!")
-                break            
+                break
+
+            
             
             
         except Exception as e:
@@ -649,30 +651,39 @@ if __name__ == "__main__":
 
 
     CONFIG.read(config_file) 
-
-
-
+    
     print("Using %s" % _dll_filename)
-    
-    
-    BUF_SIZE = 65536  # lets read stuff in 64kb chunks!
 
-    md5 = hashlib.md5()
-    sha1 = hashlib.sha1()
-    sha256 = hashlib.sha256()
+    try:
+        
 
-    with open(_dll_filename, 'rb') as f:
-        while True:
-            data = f.read(BUF_SIZE)
-            if not data:
-                break
-            md5.update(data)
-            sha1.update(data)    
-            sha256.update(data)
+        BUF_SIZE = 65536  # lets read stuff in 64kb chunks!
+
+        md5 = hashlib.md5()
+        sha1 = hashlib.sha1()
+        sha256 = hashlib.sha256()
+
+        with open(_dll_filename, 'rb') as f:
+            while True:
+                data = f.read(BUF_SIZE)
+                if not data:
+                    break
+                md5.update(data)
+                sha1.update(data)    
+                sha256.update(data)
+        
+        print("MD5: {0}".format(md5.hexdigest()))
+        print("SHA1: {0}".format(sha1.hexdigest()))    
+        print("SHA256: {0}".format(sha256.hexdigest()))
+
+        
+    except Exception as e:
+        pass
+
     
-    print("MD5: {0}".format(md5.hexdigest()))
-    print("SHA1: {0}".format(sha1.hexdigest()))    
-    print("SHA256: {0}".format(sha256.hexdigest()))
+    
+    
+
     
 
 
