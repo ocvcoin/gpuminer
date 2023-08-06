@@ -22,6 +22,7 @@ import traceback
 import configparser
 
 from pycl import *
+from pycl import _dll_filename
 from array import array
 
 from test_framework.segwit_addr import (
@@ -65,7 +66,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.0.0"
+CURRENT_MINER_VERSION = "1.0.0.1"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -651,7 +652,28 @@ if __name__ == "__main__":
 
 
 
+    print("Using %s" % _dll_filename)
+    
+    
+    BUF_SIZE = 65536  # lets read stuff in 64kb chunks!
 
+    md5 = hashlib.md5()
+    sha1 = hashlib.sha1()
+    sha256 = hashlib.sha256()
+
+    with open(_dll_filename, 'rb') as f:
+        while True:
+            data = f.read(BUF_SIZE)
+            if not data:
+                break
+            md5.update(data)
+            sha1.update(data)    
+            sha256.update(data)
+    
+    print("MD5: {0}".format(md5.hexdigest()))
+    print("SHA1: {0}".format(sha1.hexdigest()))    
+    print("SHA256: {0}".format(sha256.hexdigest()))
+    
 
 
     i = 1
@@ -666,13 +688,20 @@ if __name__ == "__main__":
     print("Device Selection")
     print("Please enter a device number")    
     
-    total_devices = 0
+    
+    device_list = []
+    device_names = []
     
     for p in platforms:
 
         for d in clGetDeviceIDs(p):
-            total_devices = total_devices + 1
+            
+            device_list.append(d)
+            
             device_name = str(i)+" - "+ str(d.name) + " " + str(d.profile)
+            
+            device_names.append(device_name)
+            
             print(device_name)
 
             if device_name not in CONFIG:
@@ -697,33 +726,25 @@ if __name__ == "__main__":
             
             
             i = i + 1
-            
+    
+
+    if len(device_list) < 1:
+        print("no found any device")
+        exit()
+
+    
     selected_device_number = input().strip()
             
-    if selected_device_number.isnumeric() == False or int(selected_device_number) < 0 or int(selected_device_number) > total_devices:
+    if selected_device_number.isnumeric() == False or int(selected_device_number) < 0 or int(selected_device_number) > len(device_list):
         print("Invalid device number!")
         exit()        
                 
 
-    i = 1
-    for p in platforms:
-
-        for d in clGetDeviceIDs(p):
-        
-            
-            if i == int(selected_device_number):
-                selected_device = d
-                SELECTED_DEVICE_NAME = str(i)+" - "+ str(d.name) + " " + str(d.profile)
-                break
-            
-            
-
-            i = i + 1
+    selected_device = device_list[int(selected_device_number)-1]
+    SELECTED_DEVICE_NAME = device_names[int(selected_device_number)-1]   
 
 
-
-
-
+    
 
 
 
