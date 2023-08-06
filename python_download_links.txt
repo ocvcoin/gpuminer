@@ -1,0 +1,15 @@
+python 3.6.0 DOWNLOAD LINKS
+
+It is very important that you tick the 'Add Python 3.6 to PATH' option during installation.
+
+
+
+FOR 64 BIT WINDOWS:
+https://www.python.org/ftp/python/3.6.0/python-3.6.0-amd64.exe
+
+
+
+FOR 32 BIT WINDOWS:
+https://www.python.org/ftp/python/3.6.0/python-3.6.0.exe
+
+
