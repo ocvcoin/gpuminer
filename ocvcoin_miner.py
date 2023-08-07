@@ -66,7 +66,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.0.3"
+CURRENT_MINER_VERSION = "1.0.0.4"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -779,7 +779,7 @@ if __name__ == "__main__":
 
     try:
 
-        with open(config_file, 'w') as configfile_descp:
+        with open(config_file, 'w+') as configfile_descp:
           CONFIG.write(configfile_descp)
 
     except Exception as e:
