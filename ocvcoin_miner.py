@@ -66,7 +66,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.0.2"
+CURRENT_MINER_VERSION = "1.0.0.3"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -644,7 +644,7 @@ if __name__ == "__main__":
             config_location_path = os.path.join(os.path.expanduser('~'))
 
 
-    config_file = os.sep.join([config_location_path,"Ocvcoin Gpu Miner.ini"])
+    config_file = os.sep.join([config_location_path,"Ocvcoin_Gpu_Miner.ini"])
 
 
     CONFIG = configparser.ConfigParser()
@@ -777,13 +777,13 @@ if __name__ == "__main__":
         CONFIG[SELECTED_DEVICE_NAME]["reward_addr"] = addr
 
 
+    try:
 
+        with open(config_file, 'w') as configfile_descp:
+          CONFIG.write(configfile_descp)
 
-    with open(config_file, 'w') as configfile_descp:
-      CONFIG.write(configfile_descp)
-
-
-
+    except Exception as e:
+        print("Failed to save settings to "+str(config_file))
 
 
 
