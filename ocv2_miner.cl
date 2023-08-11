@@ -4707,6 +4707,7 @@ uint be32dec(__global const uchar* p) {
 __kernel void search_hash(
 
     const uint current_step,
+	const uint loop_count,
 
     __global const uchar* target_diff, __global const uchar* INIT_IMG,
     __global const uchar* block_header,
@@ -4730,6 +4731,9 @@ __kernel void search_hash(
   __local float color_weight[3 * 256];
   __local float space_weight[15 * 15];
   __local int space_ofs[15 * 15];
+  
+  
+  const uchar loop_limit_index = loop_count - 1;
 
 
   if (get_local_id(0) == 0) {
@@ -4834,7 +4838,9 @@ __kernel void search_hash(
       }
     }
 
-    nonce++;
-    if (nonce == 0) break;
+    
+    if (nonce == loop_limit_index) 
+		break;
+	nonce++;
   }
 }

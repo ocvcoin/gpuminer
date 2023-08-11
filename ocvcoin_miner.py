@@ -16,14 +16,16 @@ import secrets
 
 
 import ssl
-
+import platform
 import re
 import traceback
 import configparser
-
+import math
 from pycl import *
 from pycl import _dll_filename
 from array import array
+
+
 
 from test_framework.segwit_addr import (
     decode_segwit_address
@@ -66,7 +68,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.0.4"
+CURRENT_MINER_VERSION = "1.0.0.5"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -114,7 +116,7 @@ LATEST_TARGET_HEIGHT = 0
 
 
 MAX_HASHRATE = 0
-   
+LOOP_START_VAL = 1   
   
 try:
     
@@ -274,11 +276,11 @@ def rpc(method, params=None,rpc_index=0):
     if err_detected == True:
         if rpc_index == 0:
             if len(RPC_SERVERS) > 1:
-                print_norepeat("Public RPC server is not responding! Switching to backup.")
+                print_norepeat("Public RPC server is sometimes offline! Switching to backup.")
             else:
-                print_norepeat("Public RPC server is not responding! You can overcome this problem by installing Ocvcoin Core on your computer.")
+                print_norepeat("Public RPC server is sometimes offline! You can solve this problem by installing Ocvcoin Core on your computer.")
         else:
-            print_norepeat("The backup RPC server is also not responding! Is Ocvcoin Core running on your pc?")
+            print_norepeat("The backup RPC server is also not responding! Please restart Ocvcoin Core!")
             
             
         return False
@@ -416,8 +418,11 @@ def int2lehex(value, width):
 
 def ocl_mine_ocvcoin(block_template, address):       
     
-    global PYCL_QUEUE,PYCL_KERNEL,PYCL_CTX,MAX_HASHRATE,LATEST_TARGET_HEIGHT
+    global PYCL_QUEUE,PYCL_KERNEL,PYCL_CTX,MAX_HASHRATE,LATEST_TARGET_HEIGHT,LOOP_START_VAL
     
+    
+    
+    print("Starting to mine block "+str(block_template["height"]))
     
     
     txlist = []
@@ -464,26 +469,59 @@ def ocl_mine_ocvcoin(block_template, address):
     
     
     
-    calc_count = 0    
+      
+
+    local_work_items = int(CONFIG[SELECTED_DEVICE_NAME]["number_of_local_work_items"])
     
-    global_work_size = int(CONFIG[SELECTED_DEVICE_NAME]["number_of_global_work_items"])    
+    if local_work_items % 32 != 0:
+        local_work_items = int(local_work_items / 32) * 32    
+    if local_work_items == 0:
+        local_work_items = 32
+    
+    global_work_size = int(CONFIG[SELECTED_DEVICE_NAME]["number_of_global_work_items"]) 
+    if global_work_size % 256 != 0:
+        global_work_size = (int(global_work_size / 256) + 1) * 256
     
     MAX_HASHRATE = 0
     
-    calc_per_time = 256*global_work_size
+    
+    
+    if CONFIG[SELECTED_DEVICE_NAME]["loop_count"] != "auto":
+        loop_count = int(CONFIG[SELECTED_DEVICE_NAME]["loop_count"])
+        if loop_count < 0:
+            loop_count = 0
+        elif loop_count > 256:
+            loop_count = 256
+        print("loop_count auto optimization mode disabled!")
+        
+        
+    else:
+        print("loop_count auto optimization mode active!")
+        loop_count = LOOP_START_VAL
+    
+    
+    
     
     current_step = 0
+    
+    already_show1 = False
+    already_show2 = False
+    
+    start_time = time.time()
+    total_hashed = 0
     
     
     while True:
     
         try:
+        
+            calc_per_time = loop_count*global_work_size
 
             last_time_stamp = time.time()
             
-            calc_count = calc_count + calc_per_time                       
+            total_hashed = total_hashed + calc_per_time                            
             
-            run_evt = PYCL_KERNEL(current_step, target_diff_buf, init_img_buf, block_header_buf, output_buf).on(PYCL_QUEUE, global_work_size,lsize=int(CONFIG[SELECTED_DEVICE_NAME]["number_of_local_work_items"]))
+            run_evt = PYCL_KERNEL(current_step, loop_count, target_diff_buf, init_img_buf, block_header_buf, output_buf).on(PYCL_QUEUE, global_work_size,lsize=local_work_items)
 
             output_bin, evt = buffer_to_pyarray(PYCL_QUEUE, output_buf, wait_for=run_evt, like=target_dif_bin_arr) 
 
@@ -513,19 +551,50 @@ def ocl_mine_ocvcoin(block_template, address):
             current_timestamp = time.time()
             diff = current_timestamp - last_time_stamp
             
-            hash_rate = int((calc_count) / diff)
+            hash_rate = int(calc_per_time / diff)
             
+            
+            
+            
+            
+            total_diff = current_timestamp - start_time            
+            total_hash_rate = int(total_hashed / total_diff)            
             
             if MAX_HASHRATE < hash_rate:
                 MAX_HASHRATE = hash_rate
-            print("{} hash/s, max {}".format(hash_rate,MAX_HASHRATE))
+            print("Current: {} hash/s, Total: {} hash/s, Max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE,loop_count))
             
              
-            calc_count = 0
-     
-        
-
             
+            if current_step > 1 and (diff > 6  or diff < 4): 
+                
+
+                recommended_val = math.ceil((5 * loop_count) / diff)
+                if recommended_val > 256:
+                    recommended_val = 256
+                
+                if already_show1 == False:
+                    already_show1 = True                
+                    print("Warning!")
+                    print("Miner is checking new blocks every "+str(diff)+" seconds!")                
+                    print("Recomended check interval is 5 second!")                
+                
+                if CONFIG[SELECTED_DEVICE_NAME]["loop_count"] != "auto": 
+
+                    print("You can fix this issue!")
+                    print("You can set loop_count {} to {} in the ini file!".format(CONFIG[SELECTED_DEVICE_NAME]["loop_count"],recommended_val))
+                    
+                    
+                else:
+                    print("Fixing check interval... Setting loop_count {} to {} ...".format(loop_count,recommended_val))
+                    loop_count = recommended_val
+                    LOOP_START_VAL = math.ceil(recommended_val / 2)
+                    if already_show2 == False:
+                        already_show2 = True
+                        print("If this setting is decreasing your hashrate, you can turn off this automatic optimization in the ini file!")           
+                    
+                    
+                    
             
             
             LATEST_TARGET_HEIGHT = rpc_getblockcount()
@@ -542,7 +611,7 @@ def ocl_mine_ocvcoin(block_template, address):
             
         except Exception as e:
             print("Exception in loop:")
-            print(e) 
+            print(repr(e)) 
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             print(exc_type) 
@@ -603,7 +672,7 @@ def standalone_miner(address):
             
         except Exception as e:
             print("Exception in standalone_miner loop:")
-            print(e) 
+            print(repr(e)) 
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             print(exc_type) 
@@ -629,8 +698,8 @@ if __name__ == "__main__":
 
 
 
-
-
+    print("Ocvcoin Gpu Miner v"+str(CURRENT_MINER_VERSION)+" starting...")
+    print(platform.uname())
 
 
 
@@ -682,7 +751,7 @@ if __name__ == "__main__":
 
     
     
-    
+    print("Python: "+sys.version)
 
     
 
@@ -692,7 +761,7 @@ if __name__ == "__main__":
     platforms = clGetPlatformIDs()
 
     if len(platforms) < 1:
-        print("No devices supporting opencl were found!")
+        print("No devices supporting OpenCL were found!")
         exit()
 
 
@@ -709,7 +778,20 @@ if __name__ == "__main__":
             
             device_list.append(d)
             
-            device_name = str(i)+" - "+ str(d.name) + " " + str(d.profile)
+
+            try:
+                max_compute_units = str(clGetDeviceInfo(d, cl_device_info.CL_DEVICE_MAX_COMPUTE_UNITS))
+            except Exception as e:             
+                max_compute_units = str(type(e).__name__)
+
+            try:
+                max_clock_freq = str(clGetDeviceInfo(d, cl_device_info.CL_DEVICE_MAX_CLOCK_FREQUENCY))
+            except Exception as e:             
+                max_clock_freq = str(type(e).__name__)
+
+
+
+            device_name = str(i)+" - "+ str(d.name) + " " + str(d.profile) + " " + max_compute_units + " " + max_clock_freq
             
             device_names.append(device_name)
             
@@ -717,21 +799,22 @@ if __name__ == "__main__":
 
             if device_name not in CONFIG:
 
-                try:
-                    max_compute_units = str(clGetDeviceInfo(d, cl_device_info.CL_DEVICE_MAX_COMPUTE_UNITS))
-                except Exception as e:             
-                    max_compute_units = str(type(e).__name__)
+
 
                 CONFIG[device_name] = {}
                 CONFIG[device_name]["build_flags"] = "-cl-fast-relaxed-math -cl-mad-enable -cl-no-signed-zeros"
                 
-                number_of_global_work_items = ((int(max_compute_units)*5120) / 40)
-                if number_of_global_work_items % 128 != 0:
-                    number_of_global_work_items = (int(number_of_global_work_items / 128) + 1) * 128
+                
+                
+                number_of_global_work_items = ((int(max_compute_units)*int(max_clock_freq)*5120) / (1590*40)) * 2
+                if number_of_global_work_items % 256 != 0:
+                    number_of_global_work_items = (int(number_of_global_work_items / 256) + 1) * 256
                 
                 
                 CONFIG[device_name]["number_of_global_work_items"] = str(int(number_of_global_work_items))
-                CONFIG[device_name]["number_of_local_work_items"] = "128"
+                CONFIG[device_name]["number_of_local_work_items"] = "256"
+                
+                CONFIG[device_name]["loop_count"] = "auto"
                 
                 CONFIG[device_name]["reward_addr"] = ""
             
@@ -746,7 +829,7 @@ if __name__ == "__main__":
     
     selected_device_number = input().strip()
             
-    if selected_device_number.isnumeric() == False or int(selected_device_number) < 0 or int(selected_device_number) > len(device_list):
+    if selected_device_number.isnumeric() == False or int(selected_device_number) < 1 or int(selected_device_number) > len(device_list):
         print("Invalid device number!")
         exit()        
                 
@@ -783,30 +866,39 @@ if __name__ == "__main__":
           CONFIG.write(configfile_descp)
 
     except Exception as e:
+        print("Warning!")
         print("Failed to save settings to "+str(config_file))
-
+        print(repr(e))
 
 
 
   
-
+    for k in CONFIG[SELECTED_DEVICE_NAME]:
+        print(k + " = " + CONFIG[SELECTED_DEVICE_NAME][k])
     
     
     
 
     cl_file = os.sep.join([os.path.dirname(os.path.abspath(__file__)),"ocv2_miner.cl"])
 
+    try:
+        print("Building source...")
+        with open(cl_file, 'rb') as file:
+            ocv2_miner_cl_source = file.read()
 
-    with open(cl_file, 'rb') as file:
-        ocv2_miner_cl_source = file.read()
+        bopts = bytes(CONFIG[SELECTED_DEVICE_NAME]["build_flags"], 'ascii')
 
-    bopts = bytes(CONFIG[SELECTED_DEVICE_NAME]["build_flags"], 'ascii')
+        PYCL_CTX = clCreateContext(devices=[selected_device])
+        PYCL_QUEUE = clCreateCommandQueue(PYCL_CTX)
+        pycl_program = clCreateProgramWithSource(PYCL_CTX, ocv2_miner_cl_source).build(bopts)
+        PYCL_KERNEL = pycl_program['search_hash']
+        PYCL_KERNEL.argtypes = (cl_uint,cl_uint,cl_mem,cl_mem,cl_mem,cl_mem)
+        print("Build complate!")
 
-    PYCL_CTX = clCreateContext(devices=[selected_device])
-    PYCL_QUEUE = clCreateCommandQueue(PYCL_CTX)
-    pycl_program = clCreateProgramWithSource(PYCL_CTX, ocv2_miner_cl_source).build(bopts)
-    PYCL_KERNEL = pycl_program['search_hash']
-    PYCL_KERNEL.argtypes = (cl_uint,cl_mem,cl_mem,cl_mem,cl_mem)
+    except Exception as e:
+        print("Build fail!")
+        print(repr(e))
+        exit()
 
 
     try:
@@ -853,7 +945,7 @@ if __name__ == "__main__":
 
     except Exception as e:
         print("Ocvcoin Core Configurator Failed")
-        print(e)
+        print(repr(e))
 
 
 
@@ -865,8 +957,7 @@ if __name__ == "__main__":
     
 
 
-    
-    
+
 
         
     standalone_miner(addr)
