@@ -25,7 +25,7 @@ from pycl import *
 from pycl import _dll_filename
 from array import array
 
-
+from threading import Thread , Timer
 
 from test_framework.segwit_addr import (
     decode_segwit_address
@@ -68,7 +68,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.0.5"
+CURRENT_MINER_VERSION = "1.0.0.6"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -111,12 +111,36 @@ Please restart Ocvcoin Core!
 
 """
 
-
+MAX_HASHRATE = 0
+WORK_ID = 0
 LATEST_TARGET_HEIGHT = 0
 
 
-MAX_HASHRATE = 0
-LOOP_START_VAL = 1   
+
+_clbcc = 0
+def check_latest_block():    
+    
+    global _clbcc,LATEST_TARGET_HEIGHT,LATEST_BLOCK_TEMPLATE,WORK_ID  
+
+    if _clbcc % 100 == 0:
+        LATEST_BLOCK_TEMPLATE = rpc_getblocktemplate()
+        LATEST_TARGET_HEIGHT = int(LATEST_BLOCK_TEMPLATE["height"])-1
+        WORK_ID = WORK_ID + 1
+    else:    
+        tmp_theight = rpc_getblockcount()
+        
+        if tmp_theight != LATEST_TARGET_HEIGHT:
+            LATEST_TARGET_HEIGHT = tmp_theight
+            LATEST_BLOCK_TEMPLATE = rpc_getblocktemplate()
+            LATEST_TARGET_HEIGHT = int(LATEST_BLOCK_TEMPLATE["height"])-1
+            WORK_ID = WORK_ID + 1
+
+    
+    _clbcc = _clbcc + 1
+    Timer(0.35, check_latest_block).start()
+
+
+  
   
 try:
     
@@ -363,44 +387,46 @@ def rpc_submitblock(block_submission):
     
     while True:
         rpcindex = i % divider
-        if len(soft_errors) == 0 or ((not rpcindex in soft_errors) and ((not rpcindex in network_errors) or (network_errors[rpcindex] < 5))):
+        ret = rpc("submitblock", [block_submission],rpcindex)
         
-            if i > divider:
-                time.sleep(0.35)
-                print("submitblock" +str(i-divider)+ "th retry...")
-
-            ret = rpc("submitblock", [block_submission],rpcindex)        
-                
-            if ret != False:
-                
-                if ret is None:
-                    return True
-                else:    
-                    print("submitblock invalid return! rpc_index: "+str(rpcindex))
-                    print(ret)
-                    soft_errors[rpcindex] = True
-                    
+        if ret is None:
+            return
+        elif ret == False:
+            if rpcindex in network_errors[rpcindex]:
+                network_errors[rpcindex] = network_errors[rpcindex] + 1
             else:
-                #print("submitblock false! rpc_index: "+str(rpcindex))
-                if rpcindex in network_errors:
-                    network_errors[rpcindex] = network_errors[rpcindex] + 1
-                else:
-                    network_errors[rpcindex] = 1
-
+                network_errors[rpcindex] = 1
+        else:        
+            if rpcindex in soft_errors[rpcindex]:
+                soft_errors[rpcindex] = soft_errors[rpcindex] + 1
+            else:
+                soft_errors[rpcindex] = 1        
+        if len(soft_errors) == divider:
+            raise TypeError("rpc_submitblock soft_errors") 
         
-        check_completed_count = 0
-        if len(soft_errors) > 0:            
-            for j, item in enumerate(RPC_SERVERS):
-                if (j in soft_errors) or (j in network_errors and network_errors[j] >= 5):
-                    check_completed_count = check_completed_count + 1
-                    
-        if divider == check_completed_count:
-            break
+        if len(network_errors) == divider:
+            is_max_err_count_reached = True
+            for x in network_errors:
+                is_max_err_count_reached = is_max_err_count_reached and (network_errors[x] > 4)
+            if is_max_err_count_reached:
+                raise TypeError("rpc_submitblock network_errors")
+        
+        for x in soft_errors:
+            if soft_errors[x] > 8:
+                raise TypeError("rpc_submitblock soft_error")
+
+        for x in network_errors:
+            if network_errors[x] > 8:
+                raise TypeError("rpc_submitblock network_error")
+                
+        time.sleep(1)
+        
+
 
         
         i = i + 1
     
-    return False
+    
     
     
 def int2lehex(value, width):
@@ -416,11 +442,15 @@ def int2lehex(value, width):
     return value.to_bytes(width, byteorder='little')
 
 
-def ocl_mine_ocvcoin(block_template, address):       
+_loop_start_val = 1 
+def ocl_mine_ocvcoin(address):       
     
-    global PYCL_QUEUE,PYCL_KERNEL,PYCL_CTX,MAX_HASHRATE,LATEST_TARGET_HEIGHT,LOOP_START_VAL
+    global PYCL_QUEUE,PYCL_KERNEL,PYCL_CTX,MAX_HASHRATE,WORK_ID,LATEST_BLOCK_TEMPLATE,_loop_start_val
     
     
+    current_work_id = WORK_ID  
+    
+    block_template = LATEST_BLOCK_TEMPLATE
     
     print("Starting to mine block "+str(block_template["height"]))
     
@@ -489,7 +519,7 @@ def ocl_mine_ocvcoin(block_template, address):
     if CONFIG[SELECTED_DEVICE_NAME]["loop_count"] != "auto":
         loop_count = int(CONFIG[SELECTED_DEVICE_NAME]["loop_count"])
         if loop_count < 0:
-            loop_count = 0
+            loop_count = 1
         elif loop_count > 256:
             loop_count = 256
         print("loop_count auto optimization mode disabled!")
@@ -497,7 +527,7 @@ def ocl_mine_ocvcoin(block_template, address):
         
     else:
         print("loop_count auto optimization mode active!")
-        loop_count = LOOP_START_VAL
+        loop_count = _loop_start_val
     
     
     
@@ -513,162 +543,158 @@ def ocl_mine_ocvcoin(block_template, address):
     
     while True:
     
-        try:
         
-            calc_per_time = loop_count*global_work_size
+        
+        calc_per_time = loop_count*global_work_size
 
-            last_time_stamp = time.time()
+        last_time_stamp = time.time()
+        
+        total_hashed = total_hashed + calc_per_time                            
+        
+        run_evt = PYCL_KERNEL(current_step, loop_count, target_diff_buf, init_img_buf, block_header_buf, output_buf).on(PYCL_QUEUE, global_work_size,lsize=local_work_items)
+
+        output_bin, evt = buffer_to_pyarray(PYCL_QUEUE, output_buf, wait_for=run_evt, like=target_dif_bin_arr) 
+
+      
+        
+
+        # Wait for all events to complete
+        evt.wait()
+        
+        nonce_bytes = output_bin.tobytes()
+
+
+
+        if nonce_bytes[0] > 0 or nonce_bytes[1] > 0 or nonce_bytes[2] > 0 or nonce_bytes[3] > 0:
+
             
-            total_hashed = total_hashed + calc_per_time                            
+            block_header = block_header[0:76] + nonce_bytes[0:4]
+
+
+
+            submission = (block_header+new_block[80:]).hex()
+            print("Found! Submitting: {}\n".format(submission))  
+  
             
-            run_evt = PYCL_KERNEL(current_step, loop_count, target_diff_buf, init_img_buf, block_header_buf, output_buf).on(PYCL_QUEUE, global_work_size,lsize=local_work_items)
+            rpc_submitblock(submission)
+            
+            clReleaseMemObject(target_diff_buf)
+            clReleaseMemObject(init_img_buf)
+            clReleaseMemObject(block_header_buf)
+            clReleaseMemObject(output_buf)
+            
+            return
 
-            output_bin, evt = buffer_to_pyarray(PYCL_QUEUE, output_buf, wait_for=run_evt, like=target_dif_bin_arr) 
 
-          
+        current_timestamp = time.time()
+        diff = current_timestamp - last_time_stamp
+        
+        hash_rate = int(calc_per_time / diff)
+        
+        
+        
+        
+        
+        total_diff = current_timestamp - start_time            
+        total_hash_rate = int(total_hashed / total_diff)            
+        
+        if MAX_HASHRATE < hash_rate:
+            MAX_HASHRATE = hash_rate
+        print("Current: {} hash/s, Total: {} hash/s, Max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE,loop_count))
+        
+         
+        
+        if current_step > 1 and (diff > 3  or diff < 1): 
             
 
-            # Wait for all events to complete
-            evt.wait()
+            recommended_val = math.ceil((2 * loop_count) / diff)
+            if recommended_val > 256:
+                recommended_val = 256
             
-            nonce_bytes = output_bin.tobytes()
-
-
-
-            if nonce_bytes[0] > 0 or nonce_bytes[1] > 0 or nonce_bytes[2] > 0 or nonce_bytes[3] > 0:
-
-                
-                block_header = block_header[0:76] + nonce_bytes[0:4]
-
-
-
-                submission = (block_header+new_block[80:]).hex()
-                print("Found! Submitting: {}\n".format(submission))
-                response = rpc_submitblock(submission)
-
-
-
-            current_timestamp = time.time()
-            diff = current_timestamp - last_time_stamp
+            if already_show1 == False:
+                already_show1 = True                
+                print("Warning!")
+                print("Miner is checking new blocks every "+str(diff)+" seconds!")                
+                print("Recomended check interval is 2 second!")                
             
-            hash_rate = int(calc_per_time / diff)
-            
-            
-            
-            
-            
-            total_diff = current_timestamp - start_time            
-            total_hash_rate = int(total_hashed / total_diff)            
-            
-            if MAX_HASHRATE < hash_rate:
-                MAX_HASHRATE = hash_rate
-            print("Current: {} hash/s, Total: {} hash/s, Max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE,loop_count))
-            
-             
-            
-            if current_step > 1 and (diff > 6  or diff < 4): 
-                
-
-                recommended_val = math.ceil((5 * loop_count) / diff)
-                if recommended_val > 256:
-                    recommended_val = 256
-                
-                if already_show1 == False:
-                    already_show1 = True                
-                    print("Warning!")
-                    print("Miner is checking new blocks every "+str(diff)+" seconds!")                
-                    print("Recomended check interval is 5 second!")                
-                
-                if CONFIG[SELECTED_DEVICE_NAME]["loop_count"] != "auto": 
-
+            if CONFIG[SELECTED_DEVICE_NAME]["loop_count"] != "auto": 
+                if loop_count != recommended_val:
                     print("You can fix this issue!")
                     print("You can set loop_count {} to {} in the ini file!".format(CONFIG[SELECTED_DEVICE_NAME]["loop_count"],recommended_val))
-                    
-                    
-                else:
+                
+                
+            else:
+                if loop_count != recommended_val:
                     print("Fixing check interval... Setting loop_count {} to {} ...".format(loop_count,recommended_val))
-                    loop_count = recommended_val
-                    LOOP_START_VAL = math.ceil(recommended_val / 2)
-                    if already_show2 == False:
-                        already_show2 = True
-                        print("If this setting is decreasing your hashrate, you can turn off this automatic optimization in the ini file!")           
-                    
-                    
-                    
-            
-            
-            LATEST_TARGET_HEIGHT = rpc_getblockcount()
-            if LATEST_TARGET_HEIGHT != (int(block_template["height"])-1):
-                return
-            current_step = current_step + 1
-            
-            if (current_step*global_work_size + global_work_size) > 0xFFFFFF:
-                print("no more nonce!")
-                break
+                loop_count = recommended_val
+                _loop_start_val = math.ceil(recommended_val / 1.2)
+                if already_show2 == False:
+                    already_show2 = True
+                    print("If this setting is dropping your hashrate, you can turn off this automatic optimization in the ini file!")           
+                
+                
+                
+        
+        
+        
+        if WORK_ID != current_work_id:
+            print("new work detected!")
+            clReleaseMemObject(target_diff_buf)
+            clReleaseMemObject(init_img_buf)
+            clReleaseMemObject(block_header_buf)
+            clReleaseMemObject(output_buf)        
+            return
+        current_step = current_step + 1
+        
+        if (current_step*global_work_size + global_work_size) > 0xFFFFFF:
+            print("no more nonce!")
+            clReleaseMemObject(target_diff_buf)
+            clReleaseMemObject(init_img_buf)
+            clReleaseMemObject(block_header_buf)
+            clReleaseMemObject(output_buf)            
+            return
 
             
             
             
-        except Exception as e:
-            print("Exception in loop:")
-            print(repr(e)) 
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print(exc_type) 
-            print(fname) 
-            print(exc_tb.tb_lineno)
-            traceback.print_exc()
-            time.sleep(1)      
+    
             
+def build_kernel():
+    
+    global PYCL_CTX,SELECTED_DEVICE,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL
 
+    try:
+        cl_file = os.sep.join([os.path.dirname(os.path.abspath(__file__)),"ocv2_miner.cl"])
+        print("Building source...")
+        with open(cl_file, 'rb') as file:
+            ocv2_miner_cl_source = file.read()
+
+        bopts = bytes(CONFIG[SELECTED_DEVICE_NAME]["build_flags"], 'ascii')
+
+        PYCL_CTX = clCreateContext(devices=[SELECTED_DEVICE])
+        PYCL_QUEUE = clCreateCommandQueue(PYCL_CTX)
+        PYCL_PROGRAM = clCreateProgramWithSource(PYCL_CTX, ocv2_miner_cl_source).build(bopts)
+        PYCL_KERNEL = PYCL_PROGRAM['search_hash']
+        PYCL_KERNEL.argtypes = (cl_uint,cl_uint,cl_mem,cl_mem,cl_mem,cl_mem)
+        print("Build complate!")
+
+    except Exception as e:
+        print("Build fail!")
+        print(repr(e))
+        exit()
 
 def standalone_miner(address):
     
+    global PYCL_CTX,SELECTED_DEVICE,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL
 
-    global LATEST_TARGET_HEIGHT
-
-
-    
-    
-
-    
-
-    
-    block_template = rpc_getblocktemplate()
-    LATEST_TARGET_HEIGHT = int(block_template["height"])-1
+    build_kernel()
+    check_latest_block()
     
 
     while True:
-        try:
-
+        try:     
             
-                    
-            
-            
-            ocl_mine_ocvcoin(block_template, address)
-            LATEST_TARGET_HEIGHT = rpc_getblockcount()
-            if int(block_template["height"]) <= LATEST_TARGET_HEIGHT:
-                
-                try_count = 0
-                while True:
-                    if try_count > 0:
-                        print("RETRY {}: Fetching block template...".format(try_count))
-                        LATEST_TARGET_HEIGHT = rpc_getblockcount()
-                    else:
-                        print("Fetching block template...")
-                    block_template = rpc_getblocktemplate()
-                    if LATEST_TARGET_HEIGHT < int(block_template["height"]):
-                        break
-                    else:
-                        time.sleep(1)
-                        try_count += 1
-
-                
-
-
-                
-
-                        
+            ocl_mine_ocvcoin(address)                         
             
         except Exception as e:
             print("Exception in standalone_miner loop:")
@@ -678,6 +704,34 @@ def standalone_miner(address):
             print(exc_type) 
             print(fname) 
             print(exc_tb.tb_lineno)
+            
+            
+            try:
+                clReleaseKernel(PYCL_KERNEL)
+            except Exception as e:
+                pass
+            try:
+                clReleaseKernel(PYCL_PROGRAM)
+            except Exception as e:
+                pass                
+            try:
+                clReleaseKernel(PYCL_QUEUE)
+            except Exception as e:
+                pass                
+            try:
+                clReleaseKernel(PYCL_CTX)
+            except Exception as e:
+                pass                
+                
+                
+                
+                
+                
+            build_kernel()
+            
+            
+            
+            
             time.sleep(1)
 
 
@@ -806,7 +860,7 @@ if __name__ == "__main__":
                 
                 
                 
-                number_of_global_work_items = ((int(max_compute_units)*int(max_clock_freq)*5120) / (1590*40)) * 2
+                number_of_global_work_items = ((int(max_compute_units)*5120*2) / 40)
                 if number_of_global_work_items % 256 != 0:
                     number_of_global_work_items = (int(number_of_global_work_items / 256) + 1) * 256
                 
@@ -834,7 +888,7 @@ if __name__ == "__main__":
         exit()        
                 
 
-    selected_device = device_list[int(selected_device_number)-1]
+    SELECTED_DEVICE = device_list[int(selected_device_number)-1]
     SELECTED_DEVICE_NAME = device_names[int(selected_device_number)-1]   
 
 
@@ -877,28 +931,6 @@ if __name__ == "__main__":
         print(k + " = " + CONFIG[SELECTED_DEVICE_NAME][k])
     
     
-    
-
-    cl_file = os.sep.join([os.path.dirname(os.path.abspath(__file__)),"ocv2_miner.cl"])
-
-    try:
-        print("Building source...")
-        with open(cl_file, 'rb') as file:
-            ocv2_miner_cl_source = file.read()
-
-        bopts = bytes(CONFIG[SELECTED_DEVICE_NAME]["build_flags"], 'ascii')
-
-        PYCL_CTX = clCreateContext(devices=[selected_device])
-        PYCL_QUEUE = clCreateCommandQueue(PYCL_CTX)
-        pycl_program = clCreateProgramWithSource(PYCL_CTX, ocv2_miner_cl_source).build(bopts)
-        PYCL_KERNEL = pycl_program['search_hash']
-        PYCL_KERNEL.argtypes = (cl_uint,cl_uint,cl_mem,cl_mem,cl_mem,cl_mem)
-        print("Build complate!")
-
-    except Exception as e:
-        print("Build fail!")
-        print(repr(e))
-        exit()
 
 
     try:
