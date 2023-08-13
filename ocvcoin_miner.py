@@ -24,7 +24,7 @@ import math
 from pycl import *
 from pycl import _dll_filename
 from array import array
-
+from datetime import datetime
 from threading import Thread , Timer
 
 from test_framework.segwit_addr import (
@@ -68,7 +68,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.0.6"
+CURRENT_MINER_VERSION = "1.0.0.7"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -600,7 +600,11 @@ def ocl_mine_ocvcoin(address):
         
         if MAX_HASHRATE < hash_rate:
             MAX_HASHRATE = hash_rate
-        print("Current: {} hash/s, Total: {} hash/s, Max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE,loop_count))
+            
+        now = datetime.now()
+        dt_string = now.strftime("%Y-%m-%d %H:%M:%S")            
+            
+        print("[{}] Current: {} hash/s, Total: {} hash/s, Max: {} hash/s (loop_count:{})".format(dt_string,hash_rate,total_hash_rate,MAX_HASHRATE,loop_count))
         
          
         
