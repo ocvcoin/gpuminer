@@ -4715,6 +4715,12 @@ __kernel void search_hash(
     __global uchar* found_nonce  // out
 
 ) {
+	
+	
+   if(found_nonce[4] == 1)
+     return;
+
+ 
    size_t worker_thread_id = get_global_id(0);
 
    size_t global_work_size = get_global_size(0);
@@ -4733,7 +4739,7 @@ __kernel void search_hash(
   __local int space_ofs[15 * 15];
   
   
-  const uchar loop_limit_index = loop_count - 1;
+  __local uchar loop_limit_index;
 
 
   if (get_local_id(0) == 0) {
@@ -4758,7 +4764,7 @@ __kernel void search_hash(
 
     radius = d / 2;
 
-    d = radius * 2 + 1;
+    
 
     for (i = 0; i < 256 * cn; i++)
       color_weight[i] = (__private float)exp(i * i * gauss_color_coeff);
@@ -4774,6 +4780,9 @@ __kernel void search_hash(
         space_ofs[maxk++] = (__private int)(i * (38 * 3) + j * cn);
       }
     }
+  
+  loop_limit_index = loop_count - 1;
+  
   }
 
   barrier(CLK_LOCAL_MEM_FENCE);
@@ -4804,9 +4813,7 @@ __kernel void search_hash(
 
    uchar nonce = 0;
   while (1) {
-    if (found_nonce[0] > 0 || found_nonce[1] > 0 || found_nonce[2] > 0 ||
-        found_nonce[3] > 0)
-      return;
+    
 
     final_result[1782 + 77] = nonce;
 
@@ -4830,6 +4837,7 @@ __kernel void search_hash(
         reversed_hash[i] = bswap_32(hash_result[(7 - i)]);
 
       if (fulltest(reversed_hash, local_target_diff)) {
+		found_nonce[4] = 1; 
         found_nonce[0] = final_result[1782 + 76];
         found_nonce[1] = final_result[1782 + 77];
         found_nonce[2] = final_result[1782 + 78];
