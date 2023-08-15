@@ -4841,7 +4841,7 @@ __kernel void search_hash(
         found_nonce[1] = final_result[1782 + 77];
         found_nonce[2] = final_result[1782 + 78];
         found_nonce[3] = final_result[1782 + 79];
-        return;
+        
       }
     }
 
