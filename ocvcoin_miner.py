@@ -68,7 +68,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.0.8"
+CURRENT_MINER_VERSION = "1.0.0.9"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -831,54 +831,55 @@ if __name__ == "__main__":
     device_names = []
     
     for p in platforms:
+        try:
+            for d in clGetDeviceIDs(p):
+                
+                device_list.append(d)
+                
 
-        for d in clGetDeviceIDs(p):
-            
-            device_list.append(d)
-            
+                try:
+                    max_compute_units = str(clGetDeviceInfo(d, cl_device_info.CL_DEVICE_MAX_COMPUTE_UNITS))
+                except Exception as e:             
+                    max_compute_units = str(type(e).__name__)
 
-            try:
-                max_compute_units = str(clGetDeviceInfo(d, cl_device_info.CL_DEVICE_MAX_COMPUTE_UNITS))
-            except Exception as e:             
-                max_compute_units = str(type(e).__name__)
-
-            try:
-                max_clock_freq = str(clGetDeviceInfo(d, cl_device_info.CL_DEVICE_MAX_CLOCK_FREQUENCY))
-            except Exception as e:             
-                max_clock_freq = str(type(e).__name__)
-
-
-
-            device_name = str(i)+" - "+ str(d.name) + " " + str(d.profile) + " " + max_compute_units + " " + max_clock_freq
-            
-            device_names.append(device_name)
-            
-            print(device_name)
-
-            if device_name not in CONFIG:
+                try:
+                    max_clock_freq = str(clGetDeviceInfo(d, cl_device_info.CL_DEVICE_MAX_CLOCK_FREQUENCY))
+                except Exception as e:             
+                    max_clock_freq = str(type(e).__name__)
 
 
 
-                CONFIG[device_name] = {}
-                CONFIG[device_name]["build_flags"] = "-cl-fast-relaxed-math -cl-mad-enable -cl-no-signed-zeros"
+                device_name = str(i)+" - "+ str(d.name) + " " + str(d.profile) + " " + max_compute_units + " " + max_clock_freq
+                
+                device_names.append(device_name)
+                
+                print(device_name)
+
+                if device_name not in CONFIG:
+
+
+
+                    CONFIG[device_name] = {}
+                    CONFIG[device_name]["build_flags"] = "-cl-fast-relaxed-math -cl-mad-enable -cl-no-signed-zeros"
+                    
+                    
+                    
+                    number_of_global_work_items = ((int(max_compute_units)*5120*2) / 40)
+                    if number_of_global_work_items % 256 != 0:
+                        number_of_global_work_items = (int(number_of_global_work_items / 256) + 1) * 256
+                    
+                    
+                    CONFIG[device_name]["number_of_global_work_items"] = str(int(number_of_global_work_items))
+                    CONFIG[device_name]["number_of_local_work_items"] = "256"
+                    
+                    CONFIG[device_name]["loop_count"] = "auto"
+                    
+                    CONFIG[device_name]["reward_addr"] = ""
                 
                 
-                
-                number_of_global_work_items = ((int(max_compute_units)*5120*2) / 40)
-                if number_of_global_work_items % 256 != 0:
-                    number_of_global_work_items = (int(number_of_global_work_items / 256) + 1) * 256
-                
-                
-                CONFIG[device_name]["number_of_global_work_items"] = str(int(number_of_global_work_items))
-                CONFIG[device_name]["number_of_local_work_items"] = "256"
-                
-                CONFIG[device_name]["loop_count"] = "auto"
-                
-                CONFIG[device_name]["reward_addr"] = ""
-            
-            
-            i = i + 1
-    
+                i = i + 1
+        except Exception as e:
+            print("Warning! clGetDeviceIDs loop exception: "+str(repr(e)))
 
     if len(device_list) < 1:
         print("no found any device")
