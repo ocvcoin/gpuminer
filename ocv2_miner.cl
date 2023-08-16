@@ -4717,7 +4717,8 @@ __kernel void search_hash(
 ) {
 	
 	
-   
+   if(found_nonce[4]==1)
+     return;
 
  
    size_t worker_thread_id = get_global_id(0);
@@ -4745,7 +4746,7 @@ __kernel void search_hash(
 
 
     for ( int i = 0; i < 8; i++)
-      local_target_diff[7 - i] = be32dec(target_diff + i);
+      local_target_diff[7 - i] = be32dec(target_diff + i*4);
 
     for ( int i = 0; i < 1728; i++) tmp_arr1[i] = INIT_IMG[i];
 
@@ -4836,11 +4837,14 @@ __kernel void search_hash(
         reversed_hash[i] = bswap_32(hash_result[(7 - i)]);
 
       if (fulltest(reversed_hash, local_target_diff)) {
-		 
+		  
+		  
+		found_nonce[4] = 1; 
         found_nonce[0] = final_result[1782 + 76];
         found_nonce[1] = final_result[1782 + 77];
         found_nonce[2] = final_result[1782 + 78];
         found_nonce[3] = final_result[1782 + 79];
+		
         
       }
     }

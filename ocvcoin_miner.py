@@ -68,7 +68,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.1.3"
+CURRENT_MINER_VERSION = "1.0.1.4"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
