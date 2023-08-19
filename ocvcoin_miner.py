@@ -68,7 +68,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.1.4"
+CURRENT_MINER_VERSION = "1.0.1.5"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -297,9 +297,9 @@ def rpc(method, params=None,rpc_index=0):
     if err_detected == True:
         if rpc_index == 0:
             if len(RPC_SERVERS) > 1:
-                print_norepeat("Public RPC server is sometimes offline! Switching to backup.")
+                print_norepeat("Public RPC server sometimes not responding! Switching to backup RPC server!")
             else:
-                print_norepeat("Public RPC server is sometimes offline! You can solve this problem by installing Ocvcoin Core on your computer.")
+                print_norepeat("Public RPC server sometimes not responding! It is recommended to install Ocvcoin Core on your computer!")
         else:
             print_norepeat("The backup RPC server is also not responding! Please restart Ocvcoin Core!")
             
@@ -813,7 +813,15 @@ if __name__ == "__main__":
 
     i = 1
 
-    platforms = clGetPlatformIDs()
+    try:
+        platforms = clGetPlatformIDs()
+    except Exception as e: 
+
+        print(repr(e))
+        print("Make sure the GPU drivers are installed!")
+        print("This could be the cause of this error")
+        
+        exit()
 
     if len(platforms) < 1:
         print("No devices supporting OpenCL were found!")

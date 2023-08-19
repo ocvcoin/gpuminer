@@ -4414,8 +4414,8 @@ void ocv2_medianBlur(__private uchar* input_image,__private uchar* output_image,
       dst_step1 = -dst_step1;
     }
 
-    int zone0[3][16] = {0};
-    int zone1[3][16 * 16] = {0};
+    int zone0[3][16] = {{0}};
+    int zone1[3][16 * 16] = {{0}};
 
     for (y = 0; y <= m / 2; y++) {
       for (c = 0; c < cn; c++) {
