@@ -68,7 +68,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.1.7"
+CURRENT_MINER_VERSION = "1.0.1.8"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -449,6 +449,13 @@ def ocl_mine_ocvcoin(address):
     
     block_template = LATEST_BLOCK_TEMPLATE
     
+
+    if IS_NEW_VERSION_AVAILABLE:
+        print("Device: "+SELECTED_DEVICE_NAME+" Miner: gpuminer v"+CURRENT_MINER_VERSION+" (NEW VERSION AVAILABLE!!!)")
+    else:
+        print("Device: "+SELECTED_DEVICE_NAME+" Miner: gpuminer v"+CURRENT_MINER_VERSION)
+        
+        
     print("Starting to mine block "+str(block_template["height"]))
     
     
@@ -486,12 +493,16 @@ def ocl_mine_ocvcoin(address):
 
     # Create buffers
     
-    target_dif_bin_arr = array('B', bytes.fromhex(block_template['target']))
     
-    target_diff_buf, _ = buffer_from_pyarray(PYCL_QUEUE, target_dif_bin_arr, blocking=True)
+    
+    target_diff_buf, _ = buffer_from_pyarray(PYCL_QUEUE, array('B', bytes.fromhex(block_template['target'])), blocking=True)
     init_img_buf, _ = buffer_from_pyarray(PYCL_QUEUE, array('B', final_init_img), blocking=True)
     block_header_buf, _ = buffer_from_pyarray(PYCL_QUEUE, array('B', block_header), blocking=True)
-    output_buf = target_diff_buf.empty_like_this()
+    
+    output_buf_arr = array('B', b'\x00' * 32)    
+    output_buf, _ = buffer_from_pyarray(PYCL_QUEUE, output_buf_arr, blocking=True)    
+    
+    
 
     
     
@@ -550,7 +561,7 @@ def ocl_mine_ocvcoin(address):
         
         run_evt = PYCL_KERNEL(current_step, loop_count, target_diff_buf, init_img_buf, block_header_buf, output_buf).on(PYCL_QUEUE, global_work_size,lsize=local_work_items)
 
-        output_bin, evt = buffer_to_pyarray(PYCL_QUEUE, output_buf, wait_for=run_evt, like=target_dif_bin_arr) 
+        output_bin, evt = buffer_to_pyarray(PYCL_QUEUE, output_buf, wait_for=run_evt, like=output_buf_arr) 
 
       
         
@@ -562,7 +573,7 @@ def ocl_mine_ocvcoin(address):
 
 
 
-        if nonce_bytes[0] > 0 or nonce_bytes[1] > 0 or nonce_bytes[2] > 0 or nonce_bytes[3] > 0:
+        if nonce_bytes[4] > 0:
 
             
             block_header = block_header[0:76] + nonce_bytes[0:4]
@@ -739,7 +750,7 @@ def standalone_miner(address):
 if __name__ == "__main__":
 
     screen_clear()
-    
+    IS_NEW_VERSION_AVAILABLE = False
     try:           
         request = urllib.request.Request("https://raw.githubusercontent.com/ocvcoin/gpuminer/main/version.txt")
         sslfix_context = ssl._create_unverified_context()        
@@ -748,6 +759,7 @@ if __name__ == "__main__":
         if resp.decode('ascii').strip() != CURRENT_MINER_VERSION:
             print("New version is available.")
             print("To update, visit: ocvcoin.com\n")
+            IS_NEW_VERSION_AVAILABLE = True
     except:
         print("\nNew version check failed. Skipping...\n")
 
