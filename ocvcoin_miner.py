@@ -68,7 +68,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.2.0"
+CURRENT_MINER_VERSION = "1.0.2.1"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -490,7 +490,7 @@ def ocl_mine_ocvcoin(device_index):
 
         
     
-    MAX_HASHRATE[device_index] = 0
+
     
     current_work_id = WORK_ID  
     
@@ -512,7 +512,7 @@ def ocl_mine_ocvcoin(device_index):
      
   
 
-    coinbase = create_coinbase_via_bech32_addr(block_template["height"], CONFIG[DEVICE_ID2GROUP[device_index]]["reward_addr"], block_template["coinbasevalue"],"["+DEVICE_NAMES[device_index]+"]" + " {}/{}/{} {} {}".format(global_work_size,local_work_items,loop_count,MAX_HASHRATE[device_index],CURRENT_MINER_VERSION).replace("FULL_PROFILE", "FP").replace("EMBEDDED_PROFILE", "EP").replace(": ", ":").replace("[", "").replace("]", ""))
+    coinbase = create_coinbase_via_bech32_addr(block_template["height"], CONFIG[DEVICE_ID2GROUP[device_index]]["reward_addr"], block_template["coinbasevalue"],DEVICE_NAMES[device_index].replace("FULL_PROFILE", "FP").replace("EMBEDDED_PROFILE", "EP").replace(": ", ":") + " {}/{}/{} {} {}".format(global_work_size,local_work_items,loop_count,MAX_HASHRATE[device_index],CURRENT_MINER_VERSION))
 
     block = create_block( coinbase=coinbase,  tmpl=block_template, txlist=txlist)
     
@@ -546,7 +546,7 @@ def ocl_mine_ocvcoin(device_index):
     
 
     
-    
+    MAX_HASHRATE[device_index] = 0    
     
     
     
