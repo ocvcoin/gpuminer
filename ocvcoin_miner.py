@@ -68,7 +68,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.1.9"
+CURRENT_MINER_VERSION = "1.0.2.0"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -512,7 +512,7 @@ def ocl_mine_ocvcoin(device_index):
      
   
 
-    coinbase = create_coinbase_via_bech32_addr(block_template["height"], CONFIG[DEVICE_ID2GROUP[device_index]]["reward_addr"], block_template["coinbasevalue"],"["+DEVICE_NAMES[device_index]+"]" + " {}/{}/{} {} {}".format(global_work_size,local_work_items,loop_count,MAX_HASHRATE[device_index],CURRENT_MINER_VERSION))
+    coinbase = create_coinbase_via_bech32_addr(block_template["height"], CONFIG[DEVICE_ID2GROUP[device_index]]["reward_addr"], block_template["coinbasevalue"],"["+DEVICE_NAMES[device_index]+"]" + " {}/{}/{} {} {}".format(global_work_size,local_work_items,loop_count,MAX_HASHRATE[device_index],CURRENT_MINER_VERSION).replace("FULL_PROFILE", "FP").replace("EMBEDDED_PROFILE", "EP").replace(": ", ":").replace("[", "").replace("]", ""))
 
     block = create_block( coinbase=coinbase,  tmpl=block_template, txlist=txlist)
     
@@ -760,8 +760,8 @@ if __name__ == "__main__":
         f = urllib.request.urlopen(request,context=sslfix_context,timeout=5)
         resp = f.read()
         if resp.decode('ascii').strip() != CURRENT_MINER_VERSION:
-            print("New version is available.")
-            print("To update, visit: ocvcoin.com\n")
+            print("")
+            print("\033[91m\nNew version is available.\nTo update, visit: ocvcoin.com\n\033[00m")
             IS_NEW_VERSION_AVAILABLE = True
     except:
         print("\nNew version check failed. Skipping...\n")
