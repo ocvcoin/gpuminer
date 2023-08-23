@@ -68,7 +68,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.2.1"
+CURRENT_MINER_VERSION = "1.0.2.2"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -453,7 +453,8 @@ def ocl_mine_ocvcoin(device_index):
     if device_index not in _loop_start_val:
         _loop_start_val[device_index] = 1
 
-
+    if device_index not in MAX_HASHRATE:
+        MAX_HASHRATE[device_index] = 0
     
       
 
@@ -719,7 +720,7 @@ def standalone_miner(device_index):
             printd(device_index,exc_type) 
             printd(device_index,fname) 
             printd(device_index,exc_tb.tb_lineno)
-            
+            traceback.print_exc()
             
             try:
                 clReleaseKernel(PYCL_KERNEL[device_index])
