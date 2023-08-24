@@ -68,7 +68,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.2.2"
+CURRENT_MINER_VERSION = "1.0.2.3"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -123,14 +123,16 @@ def check_latest_block():
         LATEST_BLOCK_TEMPLATE = rpc_getblocktemplate()
         LATEST_TARGET_HEIGHT = int(LATEST_BLOCK_TEMPLATE["height"])-1
         WORK_ID = WORK_ID + 1
+        _clbcc = 0
     else:    
-        tmp_theight = rpc_getblockcount()
+        LATEST_TARGET_HEIGHT = rpc_getblockcount()
         
-        if tmp_theight != LATEST_TARGET_HEIGHT:
-            LATEST_TARGET_HEIGHT = tmp_theight
+        if int(LATEST_BLOCK_TEMPLATE["height"]) <= LATEST_TARGET_HEIGHT:
+            
             LATEST_BLOCK_TEMPLATE = rpc_getblocktemplate()
             LATEST_TARGET_HEIGHT = int(LATEST_BLOCK_TEMPLATE["height"])-1
             WORK_ID = WORK_ID + 1
+            _clbcc = 0
 
     
     _clbcc = _clbcc + 1
@@ -318,14 +320,13 @@ def rpc(method, params=None,rpc_index=0):
 
 
 def rpc_getblockcount():
-    
+    global LATEST_TARGET_HEIGHT
     
     divider = len(RPC_SERVERS)
     i = divider
     while True:
         rpcindex = i % divider
-        if i > divider:
-            time.sleep(0.35)
+        #if i > divider:            
             #print("getblockcount" +str(i-divider)+ "th retry...")
             
         ret = rpc("getblockcount",rpc_index=rpcindex)        
@@ -334,27 +335,30 @@ def rpc_getblockcount():
             ret = int(ret)
             if ret >= LATEST_TARGET_HEIGHT:
                 break
-            else:    
+            #else:    
                 #print("getblockcount low! rpc_index: "+str(rpcindex))
                 #print("ret >= LATEST_TARGET_HEIGHT")
                 #print(str(ret)+"    "+str(LATEST_TARGET_HEIGHT))
-                pass
-        else:
+                
+        #else:
             #print("getblockcount false! rpc_index: "+str(rpcindex))
-            pass
+            
+        
+        if rpcindex == (divider - 1):
+            time.sleep(0.35)        
+        
         i = i + 1
     
     return ret
 
 def rpc_getblocktemplate():
-    
+    global LATEST_TARGET_HEIGHT
     
     divider = len(RPC_SERVERS)
     i = divider
     while True:
         rpcindex = i % divider
-        if i > divider:
-            time.sleep(0.35)
+        #if i > divider:            
             #print("getblocktemplate" +str(i-divider)+ "th retry...")
 
         ret = rpc("getblocktemplate", [NORMAL_GBT_REQUEST_PARAMS],rpcindex)        
@@ -363,15 +367,19 @@ def rpc_getblocktemplate():
             gbt_height = int(ret["height"])
             if gbt_height > LATEST_TARGET_HEIGHT:
                 break
-            else:    
+            #else:    
                 #print("getblocktemplate height low! rpc_index: "+str(rpcindex))
                 #print("gbt_height > LATEST_TARGET_HEIGHT")
                 #print(str(gbt_height)+"    "+str(LATEST_TARGET_HEIGHT))
-                pass
-        else:
+                
+        #else:
             #print("getblocktemplate false! rpc_index: "+str(rpcindex))
             #print(ret)
-            pass
+            
+
+        if rpcindex == (divider - 1):
+            time.sleep(0.35)
+
         i = i + 1
     
     return ret
@@ -420,8 +428,9 @@ def rpc_submitblock(block_submission):
         for x in network_errors:
             if network_errors[x] > 8:
                 raise TypeError("rpc_submitblock network_error")
-                
-        time.sleep(1)
+        
+        if rpcindex == (divider - 1):
+            time.sleep(1)
         
 
 
@@ -596,7 +605,7 @@ def ocl_mine_ocvcoin(device_index):
   
             
             rpc_submitblock(submission)
-            LATEST_TARGET_HEIGHT = block_template["height"]
+            LATEST_TARGET_HEIGHT = int(block_template["height"])
             
             clReleaseMemObject(target_diff_buf)
             clReleaseMemObject(init_img_buf)
@@ -709,6 +718,7 @@ def standalone_miner(device_index):
     while True:
         try:     
             while int(LATEST_BLOCK_TEMPLATE["height"]) <= LATEST_TARGET_HEIGHT:
+                print(".", end ="")
                 time.sleep(0.05)
             ocl_mine_ocvcoin(device_index)                         
             
