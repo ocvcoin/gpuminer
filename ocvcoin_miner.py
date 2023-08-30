@@ -71,7 +71,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.2.5"
+CURRENT_MINER_VERSION = "1.0.2.6"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -937,7 +937,7 @@ def printd(device_index,i):
 
     now = datetime.now()
     dt_string = now.strftime("%Y-%m-%d %H:%M:%S")
-    print("["+str(dt_string)+"]["+DEVICE_NAMES[device_index]+"] "+str(i))
+    print("["+str(dt_string)+"] ["+DEVICE_NAMES[device_index]+"] "+str(i))
 
 
 
@@ -1641,6 +1641,11 @@ if __name__ == "__main__":
     
     
     device_search_errors = []
+    
+    
+    device_speeds = []
+    
+    
     for p in platforms:
         try:
             for d in clGetDeviceIDs(p):
@@ -1657,6 +1662,9 @@ if __name__ == "__main__":
                     max_clock_freq = str(clGetDeviceInfo(d, cl_device_info.CL_DEVICE_MAX_CLOCK_FREQUENCY))
                 except Exception as e:             
                     max_clock_freq = str(type(e).__name__)
+
+
+                device_speeds.append(int(max_compute_units)*int(max_clock_freq))
 
                 device_group_name = str(d.name) + " " + str(d.profile) + " " + max_compute_units + " " + max_clock_freq
                 
@@ -1888,33 +1896,46 @@ if __name__ == "__main__":
             print("invalid pool number!")
             exit()
             
+            
+        device_speeds_total=0
+        for _ds in device_speeds:
+            device_speeds_total += _ds
+         
+        average_ds = device_speeds_total/len(device_speeds)            
+        
+
+        #rtx 4090 is 0.01
+        pool_diff = float((average_ds * 0.01) / (128*2595))    
+            
         STRATUM_HOSTNAME = plst[selected_pool-1][1]
         
         if selected_mining_method == 1:
-            worker_password = "x,d=0.01"
+            worker_password = "x,d={:.6f}".format(pool_diff)
             STRATUM_PORT = plst[selected_pool-1][2]
             STRATUM_SSL = False
             
         elif selected_mining_method == 2:
-            worker_password = "x,d=0.01"
+            worker_password = "x,d={:.6f}".format(pool_diff)
             STRATUM_PORT = plst[selected_pool-1][4]
             STRATUM_SSL = True
             
         if selected_mining_method == 3:
-            worker_password = "x,d=0.01,m=solo"
+            worker_password = "x,d={:.6f},m=solo".format(pool_diff)
             STRATUM_PORT = plst[selected_pool-1][3]  
             STRATUM_SSL = False
             
         if selected_mining_method == 4:
-            worker_password = "x,d=0.01,m=solo"
+            worker_password = "x,d={:.6f},m=solo".format(pool_diff)
             STRATUM_PORT = plst[selected_pool-1][5]
             STRATUM_SSL = True
 
 
 
 
-
-
+        print("SSL: {}".format(STRATUM_SSL))
+        print("HOST: {}".format(STRATUM_HOSTNAME))
+        print("PORT: {}".format(STRATUM_PORT))        
+        print("OPTIONS: {}".format(worker_password))
 
 
 
