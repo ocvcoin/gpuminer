@@ -27,7 +27,7 @@ from array import array
 from datetime import datetime
 from threading import Thread , Timer
 import threading
-import binascii
+
 import socket
 import selectors
 from test_framework.segwit_addr import (
@@ -71,7 +71,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.2.4"
+CURRENT_MINER_VERSION = "1.0.2.5"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -753,10 +753,9 @@ def stratum_ocl_mine_ocvcoin(device_index):
         if MAX_HASHRATE[device_index] < hash_rate:
             MAX_HASHRATE[device_index] = hash_rate
             
-        now = datetime.now()
-        dt_string = now.strftime("%Y-%m-%d %H:%M:%S")            
             
-        printd(device_index,"[{}] Now: {}, Avg: {}, Max: {} hash/s (loop_count:{})".format(dt_string,hash_rate,total_hash_rate,MAX_HASHRATE[device_index],loop_count))
+            
+        printd(device_index,"Now: {}, Avg: {}, Max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE[device_index],loop_count))
         
          
         
@@ -935,7 +934,10 @@ except Exception as e:
 
 
 def printd(device_index,i):
-    print("["+DEVICE_NAMES[device_index]+"] "+str(i))
+
+    now = datetime.now()
+    dt_string = now.strftime("%Y-%m-%d %H:%M:%S")
+    print("["+str(dt_string)+"]["+DEVICE_NAMES[device_index]+"] "+str(i))
 
 
 
@@ -1405,10 +1407,9 @@ def ocl_mine_ocvcoin(device_index):
         if MAX_HASHRATE[device_index] < hash_rate:
             MAX_HASHRATE[device_index] = hash_rate
             
-        now = datetime.now()
-        dt_string = now.strftime("%Y-%m-%d %H:%M:%S")            
             
-        printd(device_index,"[{}] Now: {}, Avg: {}, Max: {} hash/s (loop_count:{})".format(dt_string,hash_rate,total_hash_rate,MAX_HASHRATE[device_index],loop_count))
+            
+        printd(device_index,"Now: {}, Avg: {}, Max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE[device_index],loop_count))
         
          
         
@@ -1831,7 +1832,7 @@ if __name__ == "__main__":
     print("Mining Method Selection")
     print("Please enter a method number:")
 
-    mining_methods_list = ["POOL","POOL (SSL)","SOLO POOL","SOLO POOL (SSL)","SOLO (OUR PUBLIC RPC)"]
+    mining_methods_list = ["POOL","POOL (SSL CONNECTION)","SOLO POOL","SOLO POOL (SSL CONNECTION)","SOLO (OUR PUBLIC RPC)"]
     
     i = 0
     for mining_method in mining_methods_list:
@@ -1890,22 +1891,22 @@ if __name__ == "__main__":
         STRATUM_HOSTNAME = plst[selected_pool-1][1]
         
         if selected_mining_method == 1:
-            worker_password = "x,d=0.001"
+            worker_password = "x,d=0.01"
             STRATUM_PORT = plst[selected_pool-1][2]
             STRATUM_SSL = False
             
         elif selected_mining_method == 2:
-            worker_password = "x,d=0.001"
+            worker_password = "x,d=0.01"
             STRATUM_PORT = plst[selected_pool-1][4]
             STRATUM_SSL = True
             
         if selected_mining_method == 3:
-            worker_password = "x,d=0.001,m=solo"
+            worker_password = "x,d=0.01,m=solo"
             STRATUM_PORT = plst[selected_pool-1][3]  
             STRATUM_SSL = False
             
         if selected_mining_method == 4:
-            worker_password = "x,d=0.001,m=solo"
+            worker_password = "x,d=0.01,m=solo"
             STRATUM_PORT = plst[selected_pool-1][5]
             STRATUM_SSL = True
 
