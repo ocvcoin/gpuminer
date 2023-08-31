@@ -27,7 +27,7 @@ from array import array
 from datetime import datetime
 from threading import Thread , Timer
 import threading
-
+import binascii
 import socket
 import selectors
 from test_framework.segwit_addr import (
@@ -71,7 +71,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.2.6"
+CURRENT_MINER_VERSION = "1.0.2.7"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -116,29 +116,11 @@ WORK_ID = 0
 LATEST_TARGET_HEIGHT = 0
 
 
-def hashIt(firstTxHash, secondTxHash):
-    # Reverse inputs before and after hashing
-    # due to big-endian
-    unhex_reverse_first = bytes.fromhex(firstTxHash)[::-1]
-    unhex_reverse_second = bytes.fromhex(secondTxHash)[::-1]
-
-    concat_inputs = unhex_reverse_first+unhex_reverse_second
-    first_hash_inputs = hashlib.sha256(concat_inputs).digest()
-    final_hash_inputs = hashlib.sha256(first_hash_inputs).digest()
-    # reverse final hash and hex result
-    return final_hash_inputs[::-1].hex()
- 
- # Hash pairs of items recursively until a single value is obtained
-def merkleCalculator(hashList):
-    if len(hashList) == 1:
-        return hashList[0]
-    newHashList = []
-    # Process pairs. For odd length, the last is skipped
-    for i in range(0, len(hashList)-1, 2):
-        newHashList.append(hashIt(hashList[i], hashList[i+1]))
-    if len(hashList) % 2 == 1: # odd, hash last item twice
-        newHashList.append(hashIt(hashList[-1], hashList[-1]))
-    return merkleCalculator(newHashList)
+def build_merkle_root(coinbase_hash_bin, merkle_branch):
+    merkle_root = coinbase_hash_bin
+    for h in merkle_branch:
+        merkle_root = hashlib.sha256(hashlib.sha256(merkle_root + binascii.unhexlify(h)).digest()).digest()
+    return binascii.hexlify(merkle_root).decode('utf-8')
 
 
 def build_block_header(params,extranonce,extranonce2):
@@ -175,13 +157,13 @@ def build_block_header(params,extranonce,extranonce2):
 
     
     coinbase = coinbase1 + extranonce + extranonce2 + coinbase2
-    coinbase_hash = hashlib.sha256(hashlib.sha256(bytes.fromhex(coinbase)).digest()).digest()
+    coinbase_hash_bin = hashlib.sha256(hashlib.sha256(bytes.fromhex(coinbase)).digest()).digest()
 
 
     
-    merkle_branch.insert(0, coinbase_hash.hex())
     
-    merkle_root = merkleCalculator(merkle_branch)
+    
+    merkle_root = build_merkle_root(coinbase_hash_bin, merkle_branch)
 
 
 
@@ -277,7 +259,7 @@ def stratum_print_stats():
 
 
     while True:
-        time.sleep(60)
+        time.sleep(30)
         print("")
         print("\033[92m")
 
