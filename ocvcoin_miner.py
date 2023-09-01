@@ -6,30 +6,31 @@ import urllib.parse
 import base64
 import json
 import hashlib
-
 import random
 import time
 import os
 import sys
-
 import secrets
-
-
 import ssl
 import platform
 import re
-import traceback
+
 import configparser
 import math
+
+
 from pycl import *
 from pycl import _dll_filename
 from array import array
 from datetime import datetime
 from threading import Thread , Timer
+
 import threading
 import binascii
 import socket
 import selectors
+
+
 from test_framework.segwit_addr import (
     decode_segwit_address
 )
@@ -71,7 +72,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.2.7"
+CURRENT_MINER_VERSION = "1.0.2.8"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -240,7 +241,7 @@ def block_bits2target(bits):
 
 def stratum_print_stats():    
     
-    global STRATUM_ERROR_DATA,STRATUM_FAIL_COUNT,STRATUM_SUCCESS_COUNT  
+    global STRATUM_GLOBALS  
 
 
     def unique(list1):
@@ -260,77 +261,84 @@ def stratum_print_stats():
 
     while True:
         time.sleep(30)
-        print("")
-        print("\033[92m")
-
-        methods = unique(list(STRATUM_FAIL_COUNT.keys()) + list(STRATUM_SUCCESS_COUNT.keys()))
-        for method in methods:
         
-            succ = 0
-            if method in STRATUM_SUCCESS_COUNT:
-                succ = STRATUM_SUCCESS_COUNT[method]
+        with STRATUM_GLOBALS["log_lock"]:
+        
+            print("")
+            print("\033[92m")
 
-            fail = 0
-            if method in STRATUM_FAIL_COUNT:
-                fail = STRATUM_FAIL_COUNT[method]
-
-            if succ > 0:
-                if fail > 0:
-                    rate = (100 * succ) / (succ + fail)
-                else:
-                    rate = 100
-            else:
-                rate = 0
+            methods = unique(list(STRATUM_GLOBALS["fail_count"].keys()) + list(STRATUM_GLOBALS["success_count"].keys()))
+            for method in methods:
             
-        
-            print(method+":"+str(succ+fail)+"/"+str(fail)+" (%"+str(int(rate))+")")
-            if method in STRATUM_ERROR_DATA:
-                for errkey in STRATUM_ERROR_DATA[method]:
-                    print("     "+str(errkey)+":"+str(STRATUM_ERROR_DATA[method][errkey]))
-        
-        print("")
-        print("\033[00m")
+                succ = 0
+                if method in STRATUM_GLOBALS["success_count"]:
+                    succ = STRATUM_GLOBALS["success_count"][method]
 
-def stratum_reconnect():
+                fail = 0
+                if method in STRATUM_GLOBALS["fail_count"]:
+                    fail = STRATUM_GLOBALS["fail_count"][method]
 
-    global STRATUM_CONNECT_LOCK,STRATUM_SOCK,STRATUM_SUBSCRIBE_DATA
+                if succ > 0:
+                    if fail > 0:
+                        rate = (100 * succ) / (succ + fail)
+                    else:
+                        rate = 100
+                else:
+                    rate = 0
+                
+            
+                print(method+":"+str(succ+fail)+"/"+str(fail)+" (%"+str(int(rate))+")")
+                if method in STRATUM_GLOBALS["err"]:
+                    for errkey in STRATUM_GLOBALS["err"][method]:
+                        print("     "+str(errkey)+":"+str(STRATUM_GLOBALS["err"][method][errkey]))
+            
+            print("")
+            print("\033[00m")
+
+def stratum_reconnect(dgn):
+
+    global STRATUM_GLOBALS,STRATUM_CONNECTIONS
 
 
-    if STRATUM_CONNECT_LOCK.acquire(blocking=False):  # Try to acquire the lock without blocking
+    if STRATUM_CONNECTIONS[dgn]["connect_lock"].acquire(blocking=False):  # Try to acquire the lock without blocking
         try:      
 
         
-            print("Connecting...")
+            print("connecting...")
             try:
-                STRATUM_SOCK.shutdown()
-                STRATUM_SOCK.close()
+                STRATUM_CONNECTIONS[dgn]["sock"].shutdown()
+                STRATUM_CONNECTIONS[dgn]["sock"].close()
             except Exception as e:
                 pass           
             while True:
                 try:
-                    stratum_connect()
-                    if STRATUM_SUBSCRIBE_DATA != None:
-                        stratum_subscribe(STRATUM_SUBSCRIBE_DATA[0])
-                    else:
-                        stratum_subscribe()
+
+
+
+
+                    STRATUM_CONNECTIONS[dgn]["sock"] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    
+                    if STRATUM_GLOBALS["ssl"]:
+                        sslfix_context = ssl._create_unverified_context()
+                        STRATUM_CONNECTIONS[dgn]["sock"] = sslfix_context.wrap_socket(STRATUM_CONNECTIONS[dgn]["sock"])
+                    STRATUM_CONNECTIONS[dgn]["sock"].connect((STRATUM_GLOBALS["host"], STRATUM_GLOBALS["port"]))
+
+                    
+                    stratum_subscribe(dgn)
+                    stratum_authorize(dgn)
                     break
+                    
+                    
                 except Exception as e:
-                    print("Exception in stratum_reconnect:")
-                    print(repr(e)) 
-                    exc_type, exc_obj, exc_tb = sys.exc_info()
-                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    print(exc_type) 
-                    print(fname) 
-                    print(exc_tb.tb_lineno)
-                    traceback.print_exc()
-                    print("Please wait 10 seconds before reconnecting...")
-                    time.sleep(10)
+                    print("exception in stratum_reconnect:")
+                    print(repr(e))                     
+                    time.sleep(5)
 
 
 
 
         finally:
-            STRATUM_CONNECT_LOCK.release()
+            STRATUM_CONNECTIONS[dgn]["connect_lock"].release()
     
 
     
@@ -340,45 +348,50 @@ def stratum_reconnect():
 
 
 
-__stratum_extranonce2 = 0
-def stratum_safe_extranonce2():
-    global STRATUM_EXTRANONCE2_LOCK,__stratum_extranonce2
+
+def stratum_safe_extranonce2(dgn):
+    global STRATUM_CONNECTIONS
     
-    with STRATUM_EXTRANONCE2_LOCK:
-        __stratum_extranonce2 = __stratum_extranonce2 + 1  
-        ret = __stratum_extranonce2
+    with STRATUM_CONNECTIONS[dgn]["extranonce2_lock"]:
+        STRATUM_CONNECTIONS[dgn]["last_extranonce2"] = STRATUM_CONNECTIONS[dgn]["last_extranonce2"] + 1  
+        ret = STRATUM_CONNECTIONS[dgn]["last_extranonce2"]
         
     return ret
 
-__stratum_request_id = 0
-def stratum_safe_get_request_id():
-    global STRATUM_RPC_ID_LOCK,__stratum_request_id
+
+def stratum_safe_rpc_id():
+
+    global STRATUM_GLOBALS
     
-    with STRATUM_RPC_ID_LOCK:
-        __stratum_request_id = __stratum_request_id + 1  
-        ret = __stratum_request_id
+    with STRATUM_GLOBALS["rpc_id_lock"]:
+        STRATUM_GLOBALS["last_rpc_id"] = STRATUM_GLOBALS["last_rpc_id"] + 1  
+        ret = STRATUM_GLOBALS["last_rpc_id"]
         
     return ret
     
     
-def stratum_safe_sendall(data):
+def stratum_safe_sendall(dgn,data):
 
-    global STRATUM_SOCK,STRATUM_SENDALL_LOCK
+    global STRATUM_CONNECTIONS
     #print(data)
-    with STRATUM_SENDALL_LOCK:
-        STRATUM_SOCK.sendall(data) 
+    with STRATUM_CONNECTIONS[dgn]["sendall_lock"]:
+        STRATUM_CONNECTIONS[dgn]["sock"].sendall(data) 
 
    
 
-def stratum_subscribe(session_id=None):
+def stratum_subscribe(dgn):
 
-    global STRATUM_ID2METHOD
+    global STRATUM_GLOBALS
     
     uagent = "github.com/ocvcoin/gpuminer " + "v" + CURRENT_MINER_VERSION
     
-    req_id = stratum_safe_get_request_id()
+    req_id = stratum_safe_rpc_id()
     
-    STRATUM_ID2METHOD[req_id] = "mining.subscribe"
+    STRATUM_GLOBALS["id2method"][req_id] = "mining.subscribe"
+    
+    session_id = None
+        
+    
     
     subscribe_request = {
         "id": req_id,
@@ -386,121 +399,129 @@ def stratum_subscribe(session_id=None):
         "params": [uagent,session_id]
     }
     
-    stratum_safe_sendall(json.dumps(subscribe_request).encode(encoding="ascii",errors="ignore") + b'\n')
+    stratum_safe_sendall(dgn,json.dumps(subscribe_request).encode(encoding="ascii",errors="ignore") + b'\n')
     
 
 
-def stratum_authorize(worker_name,worker_password):        
+def stratum_authorize(dgn):        
 
 
-    global STRATUM_ID2METHOD
+    global STRATUM_GLOBALS,STRATUM_CONNECTIONS
     
-    req_id = stratum_safe_get_request_id()
+    req_id = stratum_safe_rpc_id()
     
-    STRATUM_ID2METHOD[req_id] = "mining.authorize"
+    STRATUM_GLOBALS["id2method"][req_id] = "mining.authorize"
+    
+    worker_name = STRATUM_CONNECTIONS[dgn]["worker_name"]
+    password = STRATUM_GLOBALS["pass"]+",d={:.6f}".format(STRATUM_CONNECTIONS[dgn]["set_diff"])
     
     authorize_request = {
         "id": req_id,
         "method": "mining.authorize",
-        "params": [worker_name, worker_password]
+        "params": [worker_name, password]
     }
-    stratum_safe_sendall(json.dumps(authorize_request).encode(encoding="ascii",errors="ignore") + b'\n')
+    stratum_safe_sendall(dgn,json.dumps(authorize_request).encode(encoding="ascii",errors="ignore") + b'\n')
 
 
 
 
 
-def stratum_process_line(line):
+def stratum_process_line(dgn,line):
 
-    global STRATUM_SUBSCRIBE_DATA,STRATUM_NOTIFY_DATA,STRATUM_TARGET,STRATUM_ID2METHOD,STRATUM_ERROR_DATA,STRATUM_FAIL_COUNT,STRATUM_SUCCESS_COUNT,STRATUM_HOSTNAME,STRATUM_PORT,WORK_ID
+    global STRATUM_GLOBALS,STRATUM_CONNECTIONS
     
     #print(line)
     
     
     response = json.loads(line.decode(encoding="ascii",errors="ignore"))
     
-    if response["id"] not in STRATUM_ID2METHOD:
+    if response["id"] not in STRATUM_GLOBALS["id2method"]:
         if "method" in response:
             method = response["method"]
         else:
             method = "null"
     else:
-        method = STRATUM_ID2METHOD[response["id"]]
-        del STRATUM_ID2METHOD[response["id"]]
+        method = STRATUM_GLOBALS["id2method"][response["id"]]
+        del STRATUM_GLOBALS["id2method"][response["id"]]
     
     if 'error' in response and response['error'] is not None:
-        
-        if type(response['error']) == str:
-            err = response['error']
-        elif "message" in response['error']:
-            err = response['error']["message"]
-        else:    
-            err = "unknown?"
-        
-        err = re.sub('[0-9]+', '.', err)
     
-        if method not in STRATUM_FAIL_COUNT:
-            STRATUM_FAIL_COUNT[method] = 0
-        STRATUM_FAIL_COUNT[method] = STRATUM_FAIL_COUNT[method] + 1
-		
-		
-    
-    
-        if method not in STRATUM_ERROR_DATA:
-            STRATUM_ERROR_DATA[method] = {}
+        with STRATUM_GLOBALS["log_lock"]:    
         
-        if err not in STRATUM_ERROR_DATA[method]:
-            STRATUM_ERROR_DATA[method][err] = 0    
-        STRATUM_ERROR_DATA[method][err] = STRATUM_ERROR_DATA[method][err] + 1
+            if type(response['error']) == str:
+                err = response['error']
+            elif "message" in response['error']:
+                err = response['error']["message"]
+            else:    
+                err = "unknown?"
+            
+            err = re.sub('[0-9]+', '.', err)
+        
+            if method not in STRATUM_GLOBALS["fail_count"]:
+                STRATUM_GLOBALS["fail_count"][method] = 0
+            STRATUM_GLOBALS["fail_count"][method] = STRATUM_GLOBALS["fail_count"][method] + 1
+            
+            
+        
+        
+            if method not in STRATUM_GLOBALS["err"]:
+                STRATUM_GLOBALS["err"][method] = {}
+            
+            if err not in STRATUM_GLOBALS["err"][method]:
+                STRATUM_GLOBALS["err"][method][err] = 0    
+            STRATUM_GLOBALS["err"][method][err] = STRATUM_GLOBALS["err"][method][err] + 1
     
     else:
     
-        if method not in STRATUM_SUCCESS_COUNT:
-            STRATUM_SUCCESS_COUNT[method] = 0
-        STRATUM_SUCCESS_COUNT[method] = STRATUM_SUCCESS_COUNT[method] + 1
-		
-		
+        with STRATUM_GLOBALS["log_lock"]:
+        
+            if method not in STRATUM_GLOBALS["success_count"]:
+                STRATUM_GLOBALS["success_count"][method] = 0
+            STRATUM_GLOBALS["success_count"][method] = STRATUM_GLOBALS["success_count"][method] + 1
+            
+            
     
     
         if method == "mining.subscribe":
-            STRATUM_SUBSCRIBE_DATA = response["result"]
-            WORK_ID = WORK_ID + 1
+            STRATUM_CONNECTIONS[dgn]["subscribe"] = response["result"]
+            STRATUM_CONNECTIONS[dgn]["work_id"] = STRATUM_CONNECTIONS[dgn]["work_id"] + 1
         elif method == "mining.set_target":            
-            STRATUM_TARGET = bytes.fromhex(response["params"][0])
-            print("Target changed to {}".format(response["params"][0]))
+            STRATUM_CONNECTIONS[dgn]["target"] = bytes.fromhex(response["params"][0])
+            print("target changed to {}".format(response["params"][0]))
             
         elif method == "mining.notify":            
-            STRATUM_NOTIFY_DATA = response["params"]              
-            WORK_ID = WORK_ID + 1
-            print("New job: {}".format(response["params"][0]))
+            STRATUM_CONNECTIONS[dgn]["notify"] = response["params"]              
+            STRATUM_CONNECTIONS[dgn]["work_id"] = STRATUM_CONNECTIONS[dgn]["work_id"] + 1
+            print("new job: {}".format(response["params"][0]))
     
         elif method == "mining.set_difficulty":            
-            STRATUM_TARGET = bytes.fromhex(diff_to_target_alternate(float(response["params"][0])))
-            print("Target changed to {}".format(response["params"][0]))
+            STRATUM_CONNECTIONS[dgn]["target"] = bytes.fromhex(diff_to_target_alternate(float(response["params"][0])))
+            print("target changed to {}".format(response["params"][0]))
         elif method == "client.reconnect":            
             
-            print("Server requested reconnection to {} {}".format(response["params"][0],response["params"][1]))
-            STRATUM_HOSTNAME = response["params"][0]
-            STRATUM_PORT = response["params"][1]
+            print("server requested reconnection to {}:{}".format(response["params"][0],response["params"][1]))
+            STRATUM_GLOBALS["host"] = response["params"][0]
+            STRATUM_GLOBALS["port"] = response["params"][1]
             if response["params"][2] is not None:   
                 
-                t = Timer(response["params"][2], stratum_reconnect)
+                t = Timer(response["params"][2], stratum_reconnect,[dgn])
                 
                 t.daemon = True
                 
                 t.start()                
-
+            else:
+                stratum_reconnect(dgn)
     
 
-def stratum_listen_lines():
+def stratum_listen_lines(dgn):
 
-    global STRATUM_SOCK
+    global STRATUM_GLOBALS,STRATUM_CONNECTIONS
     
     while True:
         try:           
 
             sel = selectors.DefaultSelector()
-            sel.register(STRATUM_SOCK, selectors.EVENT_READ)
+            sel.register(STRATUM_CONNECTIONS[dgn]["sock"], selectors.EVENT_READ)
 
             buffer = b""
 
@@ -508,41 +529,26 @@ def stratum_listen_lines():
                 events = sel.select()
                 for key, mask in events:
                     if mask & selectors.EVENT_READ:
-                        data = STRATUM_SOCK.recv(1024)
+                        data = STRATUM_CONNECTIONS[dgn]["sock"].recv(1024)
                         if not data:
                             
-                            sel.unregister(STRATUM_SOCK)
-                            STRATUM_SOCK.close()
-                            raise Exception("Connection closed!") 
+                            sel.unregister(STRATUM_CONNECTIONS[dgn]["sock"])
+                            STRATUM_CONNECTIONS[dgn]["sock"].close()
+                            raise Exception("connection closed!") 
                             
 
                         buffer += data
                         while b'\n' in buffer:
                             line, buffer = buffer.split(b'\n', 1)
-                            stratum_process_line(line)
+                            stratum_process_line(dgn,line)
         except Exception as e:
-            print("Exception in stratum_listen_lines loop:")
-            print(repr(e)) 
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print(exc_type) 
-            print(fname) 
-            print(exc_tb.tb_lineno)
-            traceback.print_exc()
-            stratum_reconnect()
+            print("exception in stratum_listen_lines loop:")
+            print(repr(e))          
+            
             time.sleep(5)
+            stratum_reconnect(dgn)
 
 
-def stratum_connect():
-
-    global STRATUM_SOCK,STRATUM_HOSTNAME,STRATUM_PORT,STRATUM_SSL
-
-    STRATUM_SOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    
-    if STRATUM_SSL:
-        sslfix_context = ssl._create_unverified_context()
-        STRATUM_SOCK = sslfix_context.wrap_socket(STRATUM_SOCK)
-    STRATUM_SOCK.connect((STRATUM_HOSTNAME, STRATUM_PORT))
 
 
 
@@ -551,8 +557,11 @@ def stratum_connect():
 _loop_start_val = {} 
 def stratum_ocl_mine_ocvcoin(device_index):       
     
-    global STRATUM_SUBSCRIBE_DATA,STRATUM_NOTIFY_DATA,STRATUM_TARGET,STRATUM_WORKER_NAMES,STRATUM_ID2METHOD,PYCL_QUEUE,PYCL_KERNEL,MAX_HASHRATE,WORK_ID,_loop_start_val
+    global STRATUM_CONNECTIONS,PYCL_QUEUE,PYCL_KERNEL,MAX_HASHRATE,_loop_start_val
     
+
+    dgn = DEVICE_ID2GROUP[device_index]
+
 
     if device_index not in _loop_start_val:
         _loop_start_val[device_index] = 1
@@ -562,14 +571,14 @@ def stratum_ocl_mine_ocvcoin(device_index):
     
       
 
-    local_work_items = abs(int(CONFIG[DEVICE_ID2GROUP[device_index]]["number_of_local_work_items"]))
+    local_work_items = abs(int(CONFIG[dgn]["number_of_local_work_items"]))
     
     if local_work_items % 32 != 0:
         local_work_items = int(local_work_items / 32) * 32    
     if local_work_items == 0:
         local_work_items = 32
     
-    global_work_size = abs(int(CONFIG[DEVICE_ID2GROUP[device_index]]["number_of_global_work_items"])) 
+    global_work_size = abs(int(CONFIG[dgn]["number_of_global_work_items"])) 
     if global_work_size % 256 != 0:
         global_work_size = (int(global_work_size / 256) + 1) * 256
     
@@ -577,8 +586,8 @@ def stratum_ocl_mine_ocvcoin(device_index):
     
     
     
-    if CONFIG[DEVICE_ID2GROUP[device_index]]["loop_count"] != "auto":
-        loop_count = abs(int(CONFIG[DEVICE_ID2GROUP[device_index]]["loop_count"]))
+    if CONFIG[dgn]["loop_count"] != "auto":
+        loop_count = abs(int(CONFIG[dgn]["loop_count"]))
         if loop_count < 1:
             loop_count = 1
         elif loop_count > 256:
@@ -597,19 +606,19 @@ def stratum_ocl_mine_ocvcoin(device_index):
     
 
     
-    current_work_id = WORK_ID 
-    current_target = STRATUM_TARGET    
+    current_work_id = STRATUM_CONNECTIONS[dgn]["work_id"] 
+    current_target = STRATUM_CONNECTIONS[dgn]["target"]    
     
-    sub_details,extranonce1,extranonce2_size = STRATUM_SUBSCRIBE_DATA    
+    sub_details,extranonce1,extranonce2_size = STRATUM_CONNECTIONS[dgn]["subscribe"]    
     
-    job_id,prevhash,coinb1,coinb2,merkle_branch,version,nbits,ntime,clean_jobs = STRATUM_NOTIFY_DATA 
+    job_id,prevhash,coinb1,coinb2,merkle_branch,version,nbits,ntime,clean_jobs = STRATUM_CONNECTIONS[dgn]["notify"] 
     
-    extranonce2 = int2lehex(stratum_safe_extranonce2(), extranonce2_size).hex()
+    extranonce2 = int2lehex(stratum_safe_extranonce2(dgn), extranonce2_size).hex()
     
-    block_header = build_block_header(STRATUM_NOTIFY_DATA,extranonce1,extranonce2)
+    block_header = build_block_header(STRATUM_CONNECTIONS[dgn]["notify"],extranonce1,extranonce2)
     
 
-    if current_work_id != WORK_ID:
+    if current_work_id != STRATUM_CONNECTIONS[dgn]["work_id"]:
         return
     
 
@@ -627,7 +636,7 @@ def stratum_ocl_mine_ocvcoin(device_index):
 
         
         
-    printd(device_index,"Starting to mine job_id: "+str(job_id))
+    printd(device_index,"starting to mine job_id: "+str(job_id))
     
     
   
@@ -665,10 +674,15 @@ def stratum_ocl_mine_ocvcoin(device_index):
     
     start_time = time.time()
     total_hashed = 0
-    
+    skip_hashrate_calculation = False
     
     while True:
     
+    
+        if skip_hashrate_calculation == True:
+            start_time = time.time()
+            total_hashed = 0
+            skip_hashrate_calculation = False
         
         
         calc_per_time = loop_count*global_work_size
@@ -689,83 +703,83 @@ def stratum_ocl_mine_ocvcoin(device_index):
         
         nonce_bytes = output_bin.tobytes()
 
-
+        
 
         if nonce_bytes[4] > 0:
 
+            skip_hashrate_calculation = True
+
             send_nonce = nonce_bytes[0:4][::-1].hex()
 
-            #send_nonce = ''.join([send_nonce[i]+send_nonce[i+1] for i in range(0,len(send_nonce),2)][::-1])
+            
 
-            printd(device_index,"Found! Submitting: {}\n".format(nonce_bytes[0:4].hex()))  
+            printd(device_index,"found! submitting: {}\n".format(nonce_bytes[0:4].hex()))  
   
-            req_id = stratum_safe_get_request_id()
+            req_id = stratum_safe_rpc_id()
             
-            STRATUM_ID2METHOD[req_id] = "mining.submit"
+            STRATUM_GLOBALS["id2method"][req_id] = "mining.submit"
             
-            payload = '{"params": ["'+STRATUM_WORKER_NAMES[device_index]+'", "'+str(job_id)+'", "'+ extranonce2 +'", "'+str(ntime)+'", "'+send_nonce+'"], "id": '+str(req_id)+', "method": "mining.submit"}\n'
+            payload = '{"params": ["'+STRATUM_CONNECTIONS[dgn]["worker_name"]+'", "'+str(job_id)+'", "'+ extranonce2 +'", "'+str(ntime)+'", "'+send_nonce+'"], "id": '+str(req_id)+', "method": "mining.submit"}\n'
             
             while True:
                 try:            
-                    stratum_safe_sendall(payload.encode(encoding="ascii",errors="ignore"))
+                    stratum_safe_sendall(dgn,payload.encode(encoding="ascii",errors="ignore"))
                     break
                 except Exception as e:
-                    printd(device_index,"Exception in mining.submit loop:")
+                    printd(device_index,"exception in mining.submit loop:")
                     printd(device_index,repr(e))
                     time.sleep(5)
-                    stratum_reconnect()
+                    stratum_reconnect(dgn)
             
             clReleaseMemObject(output_buf)
             output_buf, _ = buffer_from_pyarray(PYCL_QUEUE[device_index], output_buf_arr, blocking=True) 
 
+        if skip_hashrate_calculation != True:
 
-
-        current_timestamp = time.time()
-        diff = current_timestamp - last_time_stamp
-        
-        hash_rate = int(calc_per_time / diff)
-        
-        
-        
-        
-        
-        total_diff = current_timestamp - start_time            
-        total_hash_rate = int(total_hashed / total_diff)            
-        
-        if MAX_HASHRATE[device_index] < hash_rate:
-            MAX_HASHRATE[device_index] = hash_rate
+            current_timestamp = time.time()
+            diff = current_timestamp - last_time_stamp
+            
+            hash_rate = int(calc_per_time / diff)         
             
             
             
-        printd(device_index,"Now: {}, Avg: {}, Max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE[device_index],loop_count))
-        
-         
-        
-        if current_step > 1 and (diff > 3  or diff < 1): 
+            total_diff = current_timestamp - start_time            
+            total_hash_rate = int(total_hashed / total_diff)            
             
-
-            recommended_val = math.ceil((2 * loop_count) / diff)
-            if recommended_val > 256:
-                recommended_val = 256
-            if recommended_val < 1:
-                recommended_val = 1            
-               
+            if MAX_HASHRATE[device_index] < hash_rate:
+                MAX_HASHRATE[device_index] = hash_rate
+                
+                
+                
+            printd(device_index,"now: {}, avg: {}, max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE[device_index],loop_count))
             
-            if CONFIG[DEVICE_ID2GROUP[device_index]]["loop_count"] == "auto":                
+             
+            
+            if current_step > 1 and (diff > 3  or diff < 1): 
                 
 
-                if loop_count != recommended_val:
-                    printd(device_index,"Fixing check interval... Setting loop_count {} to {} ...".format(loop_count,recommended_val))
-                loop_count = recommended_val
-                _loop_start_val[device_index] = recommended_val
-                          
+                recommended_val = math.ceil((2 * loop_count) / diff)
+                if recommended_val > 256:
+                    recommended_val = 256
+                if recommended_val < 1:
+                    recommended_val = 1            
+                   
+                
+                if CONFIG[dgn]["loop_count"] == "auto":                
+                    
+
+                    if loop_count != recommended_val:
+                        printd(device_index,"fixing check interval... setting loop_count {} to {} ...".format(loop_count,recommended_val))
+                    loop_count = recommended_val
+                    _loop_start_val[device_index] = recommended_val
+                              
                 
                 
                 
         
         
         
-        if WORK_ID != current_work_id:
+        if STRATUM_CONNECTIONS[dgn]["work_id"] != current_work_id:
             printd(device_index,"new work detected!")
             clReleaseMemObject(target_diff_buf)
             clReleaseMemObject(init_img_buf)
@@ -782,8 +796,8 @@ def stratum_ocl_mine_ocvcoin(device_index):
             clReleaseMemObject(output_buf)            
             return
 
-        if current_target != STRATUM_TARGET:
-            current_target = STRATUM_TARGET
+        if current_target != STRATUM_CONNECTIONS[dgn]["target"]:
+            current_target = STRATUM_CONNECTIONS[dgn]["target"]
             clReleaseMemObject(target_diff_buf)
             target_diff_buf, _ = buffer_from_pyarray(PYCL_QUEUE[device_index], array('B', current_target), blocking=True)            
             
@@ -802,17 +816,17 @@ def stratum_ocl_mine_ocvcoin(device_index):
 
 def stratum_miner(device_index):
     
-    global STRATUM_SUBSCRIBE_DATA,STRATUM_NOTIFY_DATA,STRATUM_TARGET,PYCL_CTX,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL
+    global STRATUM_CONNECTIONS,PYCL_CTX,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL
 
-    build_kernel(device_index)
     
+    dgn = DEVICE_ID2GROUP[device_index]
     
 
     while True:
         try:     
 
 
-            while STRATUM_SUBSCRIBE_DATA == None or STRATUM_NOTIFY_DATA == None or STRATUM_TARGET == None:
+            while STRATUM_CONNECTIONS[dgn]["subscribe"] == None or STRATUM_CONNECTIONS[dgn]["notify"] == None or STRATUM_CONNECTIONS[dgn]["target"] == None:
                 print(".", end ="")
                 time.sleep(0.05)
 
@@ -820,14 +834,9 @@ def stratum_miner(device_index):
             stratum_ocl_mine_ocvcoin(device_index)                         
             
         except Exception as e:
-            printd(device_index,"Exception in stratum_miner loop:")
+            printd(device_index,"exception in stratum_miner loop:")
             printd(device_index,repr(e)) 
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            printd(device_index,exc_type) 
-            printd(device_index,fname) 
-            printd(device_index,exc_tb.tb_lineno)
-            traceback.print_exc()
+            
             
             try:
                 clReleaseKernel(PYCL_KERNEL[device_index])
@@ -1269,7 +1278,7 @@ def ocl_mine_ocvcoin(device_index):
 
         
         
-    printd(device_index,"Starting to mine block: "+str(block_template["height"]))
+    printd(device_index,"starting to mine block: "+str(block_template["height"]))
     
     
     txlist = []
@@ -1326,11 +1335,14 @@ def ocl_mine_ocvcoin(device_index):
     
     start_time = time.time()
     total_hashed = 0
-    
+    skip_hashrate_calculation = False
     
     while True:
     
-        
+        if skip_hashrate_calculation == True:
+            start_time = time.time()
+            total_hashed = 0   
+            skip_hashrate_calculation = False
         
         calc_per_time = loop_count*global_work_size
 
@@ -1353,14 +1365,14 @@ def ocl_mine_ocvcoin(device_index):
 
 
         if nonce_bytes[4] > 0:
-
+            skip_hashrate_calculation = True
             
             block_header = block_header[0:76] + nonce_bytes[0:4]
 
 
 
             submission = (block_header+new_block[80:]).hex()
-            printd(device_index,"Found! Submitting: {}\n".format(submission[0:80]))  
+            printd(device_index,"found! submitting: {}\n".format(submission[0:160]))  
   
             
             rpc_submitblock(submission)
@@ -1373,48 +1385,50 @@ def ocl_mine_ocvcoin(device_index):
             
             return
 
-
-        current_timestamp = time.time()
-        diff = current_timestamp - last_time_stamp
+        if skip_hashrate_calculation != True:
         
-        hash_rate = int(calc_per_time / diff)
-        
-        
-        
-        
-        
-        total_diff = current_timestamp - start_time            
-        total_hash_rate = int(total_hashed / total_diff)            
-        
-        if MAX_HASHRATE[device_index] < hash_rate:
-            MAX_HASHRATE[device_index] = hash_rate
+            
+            current_timestamp = time.time()
+            diff = current_timestamp - last_time_stamp
+            
+            hash_rate = int(calc_per_time / diff)
             
             
             
-        printd(device_index,"Now: {}, Avg: {}, Max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE[device_index],loop_count))
-        
-         
-        
-        if current_step > 1 and (diff > 3  or diff < 1): 
             
-
-            recommended_val = math.ceil((2 * loop_count) / diff)
-            if recommended_val > 256:
-                recommended_val = 256
-            if recommended_val < 1:
-                recommended_val = 1            
-               
             
-            if CONFIG[DEVICE_ID2GROUP[device_index]]["loop_count"] == "auto":                
-                
-
-                if loop_count != recommended_val:
-                    printd(device_index,"Fixing check interval... Setting loop_count {} to {} ...".format(loop_count,recommended_val))
-                loop_count = recommended_val
-                _loop_start_val[device_index] = recommended_val
-                          
+            total_diff = current_timestamp - start_time            
+            total_hash_rate = int(total_hashed / total_diff)            
+            
+            if MAX_HASHRATE[device_index] < hash_rate:
+                MAX_HASHRATE[device_index] = hash_rate
                 
                 
+                
+            printd(device_index,"Now: {}, Avg: {}, Max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE[device_index],loop_count))
+            
+             
+            
+            if current_step > 1 and (diff > 3  or diff < 1): 
+                
+
+                recommended_val = math.ceil((2 * loop_count) / diff)
+                if recommended_val > 256:
+                    recommended_val = 256
+                if recommended_val < 1:
+                    recommended_val = 1            
+                   
+                
+                if CONFIG[DEVICE_ID2GROUP[device_index]]["loop_count"] == "auto":                
+                    
+
+                    if loop_count != recommended_val:
+                        printd(device_index,"Fixing check interval... Setting loop_count {} to {} ...".format(loop_count,recommended_val))
+                    loop_count = recommended_val
+                    _loop_start_val[device_index] = recommended_val
+                              
+                    
+                    
                 
         
         
@@ -1469,7 +1483,7 @@ def standalone_miner(device_index):
     
     global LATEST_BLOCK_TEMPLATE,LATEST_TARGET_HEIGHT,PYCL_CTX,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL
 
-    build_kernel(device_index)
+    
     
     
 
@@ -1481,14 +1495,9 @@ def standalone_miner(device_index):
             ocl_mine_ocvcoin(device_index)                         
             
         except Exception as e:
-            printd(device_index,"Exception in standalone_miner loop:")
+            printd(device_index,"exception in standalone_miner loop:")
             printd(device_index,repr(e)) 
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            printd(device_index,exc_type) 
-            printd(device_index,fname) 
-            printd(device_index,exc_tb.tb_lineno)
-            traceback.print_exc()
+
             
             try:
                 clReleaseKernel(PYCL_KERNEL[device_index])
@@ -1530,10 +1539,10 @@ if __name__ == "__main__":
         resp = f.read()
         if resp.decode('ascii').strip() != CURRENT_MINER_VERSION:
             print("")
-            print("\033[91m\nNew version is available.\nTo update, visit: ocvcoin.com\n\033[00m")
+            print("\033[91m\nNew version is available!\nTo update, visit: ocvcoin.com\n\033[00m")
             IS_NEW_VERSION_AVAILABLE = True
     except:
-        print("\nNew version check failed. Skipping...\n")
+        print("\nNew version check failed! Skipping...\n")
 
 
 
@@ -1567,8 +1576,7 @@ if __name__ == "__main__":
 
         BUF_SIZE = 65536  # lets read stuff in 64kb chunks!
 
-        md5 = hashlib.md5()
-        sha1 = hashlib.sha1()
+
         sha256 = hashlib.sha256()
 
         with open(_dll_filename, 'rb') as f:
@@ -1576,12 +1584,10 @@ if __name__ == "__main__":
                 data = f.read(BUF_SIZE)
                 if not data:
                     break
-                md5.update(data)
-                sha1.update(data)    
+   
                 sha256.update(data)
         
-        print("MD5: {0}".format(md5.hexdigest()))
-        print("SHA1: {0}".format(sha1.hexdigest()))    
+ 
         print("SHA256: {0}".format(sha256.hexdigest()))
 
         
@@ -1625,7 +1631,7 @@ if __name__ == "__main__":
     device_search_errors = []
     
     
-    device_speeds = []
+    device_speeds = {}
     
     
     for p in platforms:
@@ -1646,14 +1652,14 @@ if __name__ == "__main__":
                     max_clock_freq = str(type(e).__name__)
 
 
-                device_speeds.append(int(max_compute_units)*int(max_clock_freq))
+                
 
                 device_group_name = str(d.name) + " " + str(d.profile) + " " + max_compute_units + " " + max_clock_freq
                 
                 
                 device_group_name = re.sub(re.compile('\s+', re.UNICODE), ' ', device_group_name).strip()
                 
-
+                device_speeds[device_group_name] = (int(max_compute_units)*int(max_clock_freq))
                 
                 if device_group_name not in device_groups:
                     device_groups[device_group_name] = []
@@ -1708,10 +1714,14 @@ if __name__ == "__main__":
 
     new_group = {}
     for device_group_name in device_groups:
+    
+    
         new_key = str(len(device_groups[device_group_name]))+"x"+ device_group_name
         new_group[new_key] = device_groups[device_group_name]
+        device_speeds[new_key] = device_speeds[device_group_name]
+        del device_speeds[device_group_name] 
+
         
-              
         if new_key not in CONFIG:
             CONFIG[new_key] = default_configs[device_group_name]
         
@@ -1757,17 +1767,17 @@ if __name__ == "__main__":
 
             if check_addr(CONFIG[device_group_name]["reward_addr"]):
                 addr = CONFIG[device_group_name]["reward_addr"]
-                print("Reward Address for "+device_group_name+": "+addr)
+                
             else: 
                 
                 print("Requiring a reward address for "+device_group_name)
-                print("\nYou can try wallet.ocvcoin.com to create a wallet and get an address.")
+                print("\nYou can try wallet.ocvcoin.com to create a wallet and get an address!")
                 addr = input("\nEnter your ocvcoin address:\n(you can right click & paste it)\n ")
                 addr = addr.strip()
 
 
                 if check_addr(addr) != True:
-                    print("Wrong address. Address must be of bech32 type.")
+                    print("Wrong address. Address must be of bech32 type!")
                     print("(It should start with ocv1)")
                     exit()
 
@@ -1791,10 +1801,10 @@ if __name__ == "__main__":
     for device_group_name in device_groups:
     
         if selected_group_name == "ALL" or selected_group_name == device_group_name:
-            print(device_group_name)
+            print("\n     "+device_group_name)
             for k in CONFIG[device_group_name]:
-                print(" " + k + " = " + CONFIG[device_group_name][k])
-    
+                print("          " + k + " = " + CONFIG[device_group_name][k])
+            print("")
     
 
 
@@ -1822,7 +1832,7 @@ if __name__ == "__main__":
     print("Mining Method Selection")
     print("Please enter a method number:")
 
-    mining_methods_list = ["POOL","POOL (SSL CONNECTION)","SOLO POOL","SOLO POOL (SSL CONNECTION)","SOLO (OUR PUBLIC RPC)"]
+    mining_methods_list = ["POOL","POOL (SSL CONNECTION)","SOLO POOL","SOLO POOL (SSL CONNECTION)","SOLO (WITH OUR PUBLIC RPC)"]
     
     i = 0
     for mining_method in mining_methods_list:
@@ -1850,7 +1860,7 @@ if __name__ == "__main__":
         plst.append(["Mining4People.com Finland"     ,"fi.mining4people.com" ,3376,3379,23376,23379 ])
         plst.append(["Mining4People.com India"       ,"in.mining4people.com" ,3376,3379,23376,23379 ])
 
-
+        """#PhalanxMine SERVERS OFFLINE!
         plst.append(["pool.PhalanxMine.com Sweden",	      "se-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])	
         plst.append(["pool.PhalanxMine.com Singapore", 	  "sg-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])	
         plst.append(["pool.PhalanxMine.com United States","us-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])	
@@ -1859,7 +1869,7 @@ if __name__ == "__main__":
         plst.append(["pool.PhalanxMine.com Brazil", 	  "br-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])	
         plst.append(["pool.PhalanxMine.com Germany",	  "de-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])	
         plst.append(["pool.PhalanxMine.com Japan", 	      "jp-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])
-
+        """
 
         print("Pool Selection")
         print("Please enter a pool number:")
@@ -1879,126 +1889,142 @@ if __name__ == "__main__":
             exit()
             
             
-        device_speeds_total=0
-        for _ds in device_speeds:
-            device_speeds_total += _ds
+        STRATUM_GLOBALS = {}
+        STRATUM_GLOBALS["id2method"] = {}
+        STRATUM_GLOBALS["err"] = {}
+        STRATUM_GLOBALS["fail_count"] = {}
+        STRATUM_GLOBALS["success_count"] = {}
          
-        average_ds = device_speeds_total/len(device_speeds)            
-        
-
-        #rtx 4090 is 0.01
-        pool_diff = float((average_ds * 0.01) / (128*2595))    
             
-        STRATUM_HOSTNAME = plst[selected_pool-1][1]
+        STRATUM_GLOBALS["host"] = plst[selected_pool-1][1]
         
         if selected_mining_method == 1:
-            worker_password = "x,d={:.6f}".format(pool_diff)
-            STRATUM_PORT = plst[selected_pool-1][2]
-            STRATUM_SSL = False
+            STRATUM_GLOBALS["pass"] = "x"
+            STRATUM_GLOBALS["port"] = plst[selected_pool-1][2]
+            STRATUM_GLOBALS["ssl"] = False
             
         elif selected_mining_method == 2:
-            worker_password = "x,d={:.6f}".format(pool_diff)
-            STRATUM_PORT = plst[selected_pool-1][4]
-            STRATUM_SSL = True
+            STRATUM_GLOBALS["pass"] = "x"
+            STRATUM_GLOBALS["port"] = plst[selected_pool-1][4]
+            STRATUM_GLOBALS["ssl"] = True
             
         if selected_mining_method == 3:
-            worker_password = "x,d={:.6f},m=solo".format(pool_diff)
-            STRATUM_PORT = plst[selected_pool-1][3]  
-            STRATUM_SSL = False
+            STRATUM_GLOBALS["pass"] = "x,m=solo"
+            STRATUM_GLOBALS["port"] = plst[selected_pool-1][3]  
+            STRATUM_GLOBALS["ssl"] = False
             
         if selected_mining_method == 4:
-            worker_password = "x,d={:.6f},m=solo".format(pool_diff)
-            STRATUM_PORT = plst[selected_pool-1][5]
-            STRATUM_SSL = True
+            STRATUM_GLOBALS["pass"] = "x,m=solo"
+            STRATUM_GLOBALS["port"] = plst[selected_pool-1][5]
+            STRATUM_GLOBALS["ssl"] = True
 
 
 
 
-        print("SSL: {}".format(STRATUM_SSL))
-        print("HOST: {}".format(STRATUM_HOSTNAME))
-        print("PORT: {}".format(STRATUM_PORT))        
-        print("OPTIONS: {}".format(worker_password))
-
-
-
-
-
-
-
-
-
-        STRATUM_SUBSCRIBE_DATA = None
-        STRATUM_NOTIFY_DATA = None
-        STRATUM_TARGET = None
-
-
-        STRATUM_ID2METHOD = {}
-        STRATUM_ERROR_DATA = {}
-        STRATUM_FAIL_COUNT = {}
-        STRATUM_SUCCESS_COUNT = {}
-
-        STRATUM_WORKER_NAMES = {}
-
-        STRATUM_CONNECT_LOCK = threading.Lock()
-        STRATUM_EXTRANONCE2_LOCK = threading.Lock()
-        STRATUM_RPC_ID_LOCK = threading.Lock()
-        STRATUM_SENDALL_LOCK = threading.Lock()        
-
-        stratum_reconnect()
-
-
-
-
-
-        while True:
-            try:            
-
-
-
-                for device_group_name in device_groups:
-
-                    if selected_group_name == "ALL" or selected_group_name == device_group_name:
-                        
-                        for device_index in device_groups[device_group_name]:                 
-
-                            STRATUM_WORKER_NAMES[device_index] = re.sub('[^0-9a-zA-Z]+', '_', DEVICE_NAMES[device_index].replace("FULL_PROFILE", "FP").replace("EMBEDDED_PROFILE", "EP").replace(": ", ":"))
-                            
-                            STRATUM_WORKER_NAMES[device_index] = re.sub('[_]+', '_', STRATUM_WORKER_NAMES[device_index]).strip("_")
-                            
-                            STRATUM_WORKER_NAMES[device_index] = CONFIG[device_group_name]["reward_addr"]+"."+STRATUM_WORKER_NAMES[device_index]
-                        
-                            stratum_authorize(STRATUM_WORKER_NAMES[device_index],worker_password)
-
-
-
-                
-                break
-            except Exception as e:
-                print("Exception in stratum_authorize loop:")
-                print(repr(e))
-                time.sleep(5)
-                stratum_reconnect()
+        print("     SSL: {}".format(STRATUM_GLOBALS["ssl"]))
+        print("     HOST: {}".format(STRATUM_GLOBALS["host"]))
+        print("     PORT: {}".format(STRATUM_GLOBALS["port"]))        
+        print("     OPTIONS: {}".format(STRATUM_GLOBALS["pass"]))
 
 
 
 
 
 
-                    
-                    
-                    
-                    
-                    
-                    
-        threads_list.append(Thread(target=stratum_listen_lines, args=[],daemon=True))            
+
+
+
+
+
+
+
+
+
+        
+
+        
+
+
+
+        STRATUM_GLOBALS["log_lock"] = threading.Lock()
+        STRATUM_GLOBALS["last_rpc_id"] = 0
+        STRATUM_GLOBALS["rpc_id_lock"] = threading.Lock()
+          
+        STRATUM_CONNECTIONS = {}
 
 
         for device_group_name in device_groups:
 
             if selected_group_name == "ALL" or selected_group_name == device_group_name:
                 
-                for device_index in device_groups[device_group_name]:  
+            
+                STRATUM_CONNECTIONS[device_group_name] = {}
+
+                STRATUM_CONNECTIONS[device_group_name]["work_id"] = 0
+
+                STRATUM_CONNECTIONS[device_group_name]["last_extranonce2"] = 0
+                        
+                
+                
+                STRATUM_CONNECTIONS[device_group_name]["sendall_lock"] = threading.Lock()
+                STRATUM_CONNECTIONS[device_group_name]["connect_lock"] = threading.Lock()		
+                STRATUM_CONNECTIONS[device_group_name]["extranonce2_lock"] = threading.Lock()
+                
+
+
+
+
+                STRATUM_CONNECTIONS[device_group_name]["subscribe"] = None
+                STRATUM_CONNECTIONS[device_group_name]["notify"] = None
+                STRATUM_CONNECTIONS[device_group_name]["target"] = None		
+                
+                
+                #0.01 is best for rtx 4090;  
+                STRATUM_CONNECTIONS[device_group_name]["set_diff"] = float((device_speeds[device_group_name] * 0.01) / (128*2595))
+                
+                
                                 
+            
+            
+                STRATUM_CONNECTIONS[device_group_name]["worker_name"] = re.sub('[^0-9a-zA-Z]+', '_', device_group_name.replace("FULL_PROFILE", "FP").replace("EMBEDDED_PROFILE", "EP").replace(": ", ":"))
+                
+                STRATUM_CONNECTIONS[device_group_name]["worker_name"] = re.sub('[_]+', '_', STRATUM_CONNECTIONS[device_group_name]["worker_name"]).strip("_")
+                
+                STRATUM_CONNECTIONS[device_group_name]["worker_name"] = CONFIG[device_group_name]["reward_addr"]+"."+STRATUM_CONNECTIONS[device_group_name]["worker_name"]
+                stratum_reconnect(device_group_name)
+                
+               
+                
+                
+
+
+
+                
+                
+
+
+
+
+
+
+
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+
+
+        for device_group_name in device_groups:
+
+            if selected_group_name == "ALL" or selected_group_name == device_group_name:
+                
+                threads_list.append(Thread(target=stratum_listen_lines, args=[device_group_name],daemon=True))
+                
+                for device_index in device_groups[device_group_name]:  
+                    build_kernel(device_index)            
                     threads_list.append(Thread(target=stratum_miner, args=[device_index],daemon=True))
                     
                     
@@ -2082,7 +2108,7 @@ if __name__ == "__main__":
             if selected_group_name == "ALL" or selected_group_name == device_group_name:
                 
                 for device_index in device_groups[device_group_name]:            
-                    
+                    build_kernel(device_index)
                     threads_list.append(Thread(target=standalone_miner, args=[device_index],daemon=True))
 
 
