@@ -29,7 +29,7 @@ import threading
 import binascii
 import socket
 import selectors
-
+import operator
 
 from test_framework.segwit_addr import (
     decode_segwit_address
@@ -72,7 +72,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.2.8"
+CURRENT_MINER_VERSION = "1.0.2.9"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -323,9 +323,10 @@ def stratum_reconnect(dgn):
                         STRATUM_CONNECTIONS[dgn]["sock"] = sslfix_context.wrap_socket(STRATUM_CONNECTIONS[dgn]["sock"])
                     STRATUM_CONNECTIONS[dgn]["sock"].connect((STRATUM_GLOBALS["host"], STRATUM_GLOBALS["port"]))
 
-                    
+                    stratum_suggest_target(dgn)
                     stratum_subscribe(dgn)
                     stratum_authorize(dgn)
+                    stratum_suggest_difficulty(dgn)
                     break
                     
                     
@@ -423,7 +424,37 @@ def stratum_authorize(dgn):
     stratum_safe_sendall(dgn,json.dumps(authorize_request).encode(encoding="ascii",errors="ignore") + b'\n')
 
 
+def stratum_suggest_difficulty(dgn):   
 
+    global STRATUM_GLOBALS,STRATUM_CONNECTIONS
+    
+    req_id = stratum_safe_rpc_id()
+    
+    STRATUM_GLOBALS["id2method"][req_id] = "suggest_difficulty"
+    
+    request = {
+        "id": req_id,
+        "method": "suggest_difficulty",
+        "params": [STRATUM_CONNECTIONS[dgn]["set_diff"]]
+    }
+    
+    stratum_safe_sendall(dgn,json.dumps(request).encode(encoding="ascii",errors="ignore") + b'\n')
+	
+def stratum_suggest_target(dgn):        
+
+    global STRATUM_GLOBALS,STRATUM_CONNECTIONS
+    
+    req_id = stratum_safe_rpc_id()
+    
+    STRATUM_GLOBALS["id2method"][req_id] = "mining.suggest_target"
+    
+    request = {
+        "id": req_id,
+        "method": "mining.suggest_target",
+        "params": [diff_to_target_alternate(STRATUM_CONNECTIONS[dgn]["set_diff"])]
+    }
+    
+    stratum_safe_sendall(dgn,json.dumps(request).encode(encoding="ascii",errors="ignore") + b'\n')	
 
 
 def stratum_process_line(dgn,line):
@@ -452,6 +483,16 @@ def stratum_process_line(dgn,line):
                 err = response['error']
             elif "message" in response['error']:
                 err = response['error']["message"]
+
+            elif type(response['error']) is list:
+                try:
+                    err = response['error'][1]
+                except Exception as e: 
+                    try:
+                        err = response['error'][0]
+                    except Exception as e:  
+                        err = "unknown?"
+
             else:    
                 err = "unknown?"
             
@@ -873,6 +914,44 @@ def stratum_miner(device_index):
 
 
 
+       
+       
+def timed_check(host,port,timeout,is_ssl):
+
+    
+
+    def check(host,port,timeout,is_ssl):
+        sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)  
+        sock.settimeout(timeout)
+        
+        try:   
+        
+            if is_ssl:
+                sslfix_context = ssl._create_unverified_context()
+                sock = sslfix_context.wrap_socket(sock)  
+                
+            sock.connect((host,port))
+            
+            ret = True
+            
+        except Exception as e:
+            ret = False
+            
+        try:
+            sock.close()
+        except Exception as e:
+            pass            
+        
+        return ret
+           
+
+
+
+    t0 = time.time()
+    if check(host,port,timeout,is_ssl):
+       return time.time()-t0        
+    else:
+        return -1
 
 
 
@@ -1541,7 +1620,7 @@ if __name__ == "__main__":
             print("")
             print("\033[91m\nNew version is available!\nTo update, visit: ocvcoin.com\n\033[00m")
             IS_NEW_VERSION_AVAILABLE = True
-    except:
+    except Exception as e:
         print("\nNew version check failed! Skipping...\n")
 
 
@@ -1852,24 +1931,68 @@ if __name__ == "__main__":
         plst = []
 
 
-        #POOL NAME,HOSTNAME,PPLNS PORT,SOLO PORT,PPLNS SSL PORT,SOLO SSL PORT
-        plst.append(["Mining4People.com Australia"   ,"au.mining4people.com" ,3376,3379,23376,23379 ])
-        plst.append(["Mining4People.com Brazil"      ,"br.mining4people.com" ,3376,3379,23376,23379 ])
-        plst.append(["Mining4People.com Germany"     ,"de.mining4people.com" ,3376,3379,23376,23379 ])
-        plst.append(["Mining4People.com Canada"      ,"na.mining4people.com" ,3376,3379,23376,23379 ])
-        plst.append(["Mining4People.com Finland"     ,"fi.mining4people.com" ,3376,3379,23376,23379 ])
-        plst.append(["Mining4People.com India"       ,"in.mining4people.com" ,3376,3379,23376,23379 ])
+        #POOL NAME,HOSTNAME,PPLNS PORT,SOLO PORT,PPLNS SSL PORT,SOLO SSL PORT,PING
+        plst.append(["Mining4People.com Australia"   ,"au.mining4people.com" ,3376,3379,23376,23379,0 ])
+        plst.append(["Mining4People.com Brazil"      ,"br.mining4people.com" ,3376,3379,23376,23379,0 ])
+        plst.append(["Mining4People.com Germany"     ,"de.mining4people.com" ,3376,3379,23376,23379,0 ])
+        plst.append(["Mining4People.com Canada"      ,"na.mining4people.com" ,3376,3379,23376,23379,0 ])
+        plst.append(["Mining4People.com Finland"     ,"fi.mining4people.com" ,3376,3379,23376,23379,0 ])
+        plst.append(["Mining4People.com India"       ,"in.mining4people.com" ,3376,3379,23376,23379,0 ])
 
-        """#PhalanxMine SERVERS OFFLINE!
-        plst.append(["pool.PhalanxMine.com Sweden",	      "se-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])	
-        plst.append(["pool.PhalanxMine.com Singapore", 	  "sg-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])	
-        plst.append(["pool.PhalanxMine.com United States","us-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])	
-        plst.append(["pool.PhalanxMine.com Australia",	  "aus-stratum.phalanxmine.com",5120,5120,25120,25120 ])	
-        plst.append(["pool.PhalanxMine.com Russia",	      "ru-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])	
-        plst.append(["pool.PhalanxMine.com Brazil", 	  "br-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])	
-        plst.append(["pool.PhalanxMine.com Germany",	  "de-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])	
-        plst.append(["pool.PhalanxMine.com Japan", 	      "jp-stratum.phalanxmine.com" ,5120,5120,25120,25120 ])
-        """
+        
+        plst.append(["pool.PhalanxMine.com Sweden",	      "se-stratum.phalanxmine.com" ,5120,5120,25120,25120,0 ])	
+        plst.append(["pool.PhalanxMine.com Singapore", 	  "sg-stratum.phalanxmine.com" ,5120,5120,25120,25120,0 ])	
+        plst.append(["pool.PhalanxMine.com United States","us-stratum.phalanxmine.com" ,5120,5120,25120,25120,0 ])	
+        plst.append(["pool.PhalanxMine.com Australia",	  "aus-stratum.phalanxmine.com",5120,5120,25120,25120,0 ])	
+        plst.append(["pool.PhalanxMine.com Russia",	      "ru-stratum.phalanxmine.com" ,5120,5120,25120,25120,0 ])	
+        plst.append(["pool.PhalanxMine.com Brazil", 	  "br-stratum.phalanxmine.com" ,5120,5120,25120,25120,0 ])	
+        plst.append(["pool.PhalanxMine.com Germany",	  "de-stratum.phalanxmine.com" ,5120,5120,25120,25120,0 ])	
+        plst.append(["pool.PhalanxMine.com Japan", 	      "jp-stratum.phalanxmine.com" ,5120,5120,25120,25120,0 ])
+        
+        
+        STRATUM_GLOBALS = {}
+        
+        
+        if selected_mining_method == 1:
+           
+            stratum_port_index = 2
+            STRATUM_GLOBALS["ssl"] = False
+            
+        elif selected_mining_method == 2:
+            
+            stratum_port_index = 4
+            STRATUM_GLOBALS["ssl"] = True
+            
+        elif selected_mining_method == 3:
+            
+            stratum_port_index = 3  
+            STRATUM_GLOBALS["ssl"] = False
+            
+        elif selected_mining_method == 4:
+            
+            stratum_port_index = 5
+            STRATUM_GLOBALS["ssl"] = True
+
+        
+        
+        print("pinging servers...")
+        stratum_server_pings = {}
+        i = 0
+        for _pool in plst:
+            stratum_server_pings[i] = timed_check(_pool[1],_pool[stratum_port_index],1,STRATUM_GLOBALS["ssl"])        
+            i = i + 1
+ 
+        
+        sorted_plst_list = []
+        
+        sorted_stratum_servers = sorted(stratum_server_pings.items(), key=operator.itemgetter(1))
+        
+        for _sorted in sorted_stratum_servers:
+            if _sorted[1] > 0:
+                plst[_sorted[0]][6] = _sorted[1]
+                sorted_plst_list.append(plst[_sorted[0]])
+        if len(sorted_plst_list) > 0:
+            plst = sorted_plst_list
 
         print("Pool Selection")
         print("Please enter a pool number:")
@@ -1877,8 +2000,12 @@ if __name__ == "__main__":
         
         
         i = 0
+        print(f"{'' : <3}   {'' : <34}   {'ping' : <5}")
         for pl in plst:
-            print(str(i+1) + " - " + pl[0] + " " + mining_methods_list[selected_mining_method-1])
+        
+            pl_ping = "{:.3f}".format(pl[6])
+            print(f"{str(i+1) : <3} - {pl[0] : <34} - {pl_ping : <5}")
+            
             i = i + 1
             
         
@@ -1889,7 +2016,7 @@ if __name__ == "__main__":
             exit()
             
             
-        STRATUM_GLOBALS = {}
+        
         STRATUM_GLOBALS["id2method"] = {}
         STRATUM_GLOBALS["err"] = {}
         STRATUM_GLOBALS["fail_count"] = {}
@@ -1897,26 +2024,23 @@ if __name__ == "__main__":
          
             
         STRATUM_GLOBALS["host"] = plst[selected_pool-1][1]
+        STRATUM_GLOBALS["port"] = plst[selected_pool-1][stratum_port_index]
         
         if selected_mining_method == 1:
-            STRATUM_GLOBALS["pass"] = "x"
-            STRATUM_GLOBALS["port"] = plst[selected_pool-1][2]
-            STRATUM_GLOBALS["ssl"] = False
+            STRATUM_GLOBALS["pass"] = "x"            
+            
             
         elif selected_mining_method == 2:
             STRATUM_GLOBALS["pass"] = "x"
-            STRATUM_GLOBALS["port"] = plst[selected_pool-1][4]
-            STRATUM_GLOBALS["ssl"] = True
             
-        if selected_mining_method == 3:
-            STRATUM_GLOBALS["pass"] = "x,m=solo"
-            STRATUM_GLOBALS["port"] = plst[selected_pool-1][3]  
-            STRATUM_GLOBALS["ssl"] = False
             
-        if selected_mining_method == 4:
+        elif selected_mining_method == 3:
             STRATUM_GLOBALS["pass"] = "x,m=solo"
-            STRATUM_GLOBALS["port"] = plst[selected_pool-1][5]
-            STRATUM_GLOBALS["ssl"] = True
+            
+            
+        elif selected_mining_method == 4:
+            STRATUM_GLOBALS["pass"] = "x,m=solo"
+            
 
 
 
@@ -1982,7 +2106,7 @@ if __name__ == "__main__":
                 #0.01 is best for rtx 4090;  
                 STRATUM_CONNECTIONS[device_group_name]["set_diff"] = float((device_speeds[device_group_name] * 0.01) / (128*2595))
                 
-                
+                print("[{}] suggested diff: {:.6f}".format(device_group_name,STRATUM_CONNECTIONS[device_group_name]["set_diff"]))
                                 
             
             
