@@ -72,7 +72,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.2.9"
+CURRENT_MINER_VERSION = "1.0.3.0"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -430,11 +430,11 @@ def stratum_suggest_difficulty(dgn):
     
     req_id = stratum_safe_rpc_id()
     
-    STRATUM_GLOBALS["id2method"][req_id] = "suggest_difficulty"
+    STRATUM_GLOBALS["id2method"][req_id] = "mining.suggest_difficulty"
     
     request = {
         "id": req_id,
-        "method": "suggest_difficulty",
+        "method": "mining.suggest_difficulty",
         "params": [STRATUM_CONNECTIONS[dgn]["set_diff"]]
     }
     
