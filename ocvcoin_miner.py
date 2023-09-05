@@ -72,7 +72,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.3.0"
+CURRENT_MINER_VERSION = "1.0.3.1"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -323,10 +323,10 @@ def stratum_reconnect(dgn):
                         STRATUM_CONNECTIONS[dgn]["sock"] = sslfix_context.wrap_socket(STRATUM_CONNECTIONS[dgn]["sock"])
                     STRATUM_CONNECTIONS[dgn]["sock"].connect((STRATUM_GLOBALS["host"], STRATUM_GLOBALS["port"]))
 
-                    stratum_suggest_target(dgn)
+                    #stratum_suggest_target(dgn)
                     stratum_subscribe(dgn)
                     stratum_authorize(dgn)
-                    stratum_suggest_difficulty(dgn)
+                    #stratum_suggest_difficulty(dgn)
                     break
                     
                     
