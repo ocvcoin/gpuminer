@@ -72,7 +72,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.3.1"
+CURRENT_MINER_VERSION = "1.0.3.2"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -916,9 +916,9 @@ def stratum_miner(device_index):
 
        
        
-def timed_check(host,port,timeout,is_ssl):
+def stratum_timed_check(i,host,port,timeout,is_ssl):
 
-    
+    global STRATUM_SERVER_PINGS
 
     def check(host,port,timeout,is_ssl):
         sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)  
@@ -949,9 +949,9 @@ def timed_check(host,port,timeout,is_ssl):
 
     t0 = time.time()
     if check(host,port,timeout,is_ssl):
-       return time.time()-t0        
+       STRATUM_SERVER_PINGS[i] = time.time()-t0        
     else:
-        return -1
+        STRATUM_SERVER_PINGS[i] = -1
 
 
 
@@ -1976,16 +1976,27 @@ if __name__ == "__main__":
         
         
         print("pinging servers...")
-        stratum_server_pings = {}
+        ping_threads_list = []
+        STRATUM_SERVER_PINGS = {}
         i = 0
-        for _pool in plst:
-            stratum_server_pings[i] = timed_check(_pool[1],_pool[stratum_port_index],1,STRATUM_GLOBALS["ssl"])        
+        for _pool in plst:           
+
+            ping_threads_list.append(Thread(target=stratum_timed_check, args=[i,_pool[1],_pool[stratum_port_index],1,STRATUM_GLOBALS["ssl"]],daemon=True))
+            
             i = i + 1
- 
+            
+        # Start all threads
+        for th in ping_threads_list:
+            th.start()
+            
+        
+        # Wait for all of them to finish
+        for th in ping_threads_list:
+            th.join() 
         
         sorted_plst_list = []
         
-        sorted_stratum_servers = sorted(stratum_server_pings.items(), key=operator.itemgetter(1))
+        sorted_stratum_servers = sorted(STRATUM_SERVER_PINGS.items(), key=operator.itemgetter(1))
         
         for _sorted in sorted_stratum_servers:
             if _sorted[1] > 0:
