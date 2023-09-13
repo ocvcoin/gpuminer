@@ -7,15 +7,19 @@ Completely open source!
 
 ### Usage on Windows
 
-Download & Unzip: <https://github.com/ocvcoin/gpuminer/archive/refs/heads/main.zip>
+- Download & Unzip: <https://github.com/ocvcoin/gpuminer/archive/refs/heads/main.zip>
 
-Read the instructions in `python_download_links.txt` & install python 3.6.0
+- Read the instructions in `python_download_links.txt` & install python 3.6.0
 
-Run `start_mining.cmd`
+- Run `start_mining.cmd`
 
-### Usage on Ubuntu
+
+### Usage on Ubuntu, HiveOS, MacOS
+
+- Just run following command:
 
 ```
-wget -O run.sh https://raw.githubusercontent.com/ocvcoin/gpuminer/main/run.sh && sudo bash run.sh
+curl -o ~/run.sh https://raw.githubusercontent.com/ocvcoin/gpuminer/main/run.sh || wget -O ~/run.sh https://raw.githubusercontent.com/ocvcoin/gpuminer/main/run.sh && sudo bash ~/run.sh ___ADD_YOUR_OCVCOIN_ADDRESS_HERE___
 ```
 
+dont forget to change: `___ADD_YOUR_OCVCOIN_ADDRESS_HERE___`

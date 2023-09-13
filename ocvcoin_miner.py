@@ -72,7 +72,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.3.2"
+CURRENT_MINER_VERSION = "1.0.3.3"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -237,6 +237,29 @@ def block_bits2target(bits):
 
 
 
+def stratum_print_url():    
+    
+    global STRATUM_GLOBALS,OCVCOIN_ADDR_TAKEN_FROM_ARG  
+
+    pool_page = None
+    
+    if "mining4people" in STRATUM_GLOBALS["host"]:
+        if "m=solo" in STRATUM_GLOBALS["pass"]:
+            pool_page = "https://mining4people.com/pool/ocvcoin-solo/account/"+OCVCOIN_ADDR_TAKEN_FROM_ARG
+        else:
+            pool_page = "https://mining4people.com/pool/ocvcoinpplns/account/"+OCVCOIN_ADDR_TAKEN_FROM_ARG
+    elif "phalanxmine" in STRATUM_GLOBALS["host"]: 
+        pool_page = "https://pool.phalanxmine.com/?address="+OCVCOIN_ADDR_TAKEN_FROM_ARG
+
+    if pool_page == None:
+        return
+
+    while True:
+    
+        
+        print("\n\033[92m\nStats: "+pool_page+"\n\033[00m\n")
+        
+        time.sleep(120)        
 
 
 def stratum_print_stats():    
@@ -264,8 +287,8 @@ def stratum_print_stats():
         
         with STRATUM_GLOBALS["log_lock"]:
         
-            print("")
-            print("\033[92m")
+            
+            p = "\n\033[92m\n"
 
             methods = unique(list(STRATUM_GLOBALS["fail_count"].keys()) + list(STRATUM_GLOBALS["success_count"].keys()))
             for method in methods:
@@ -287,13 +310,14 @@ def stratum_print_stats():
                     rate = 0
                 
             
-                print(method+":"+str(succ+fail)+"/"+str(fail)+" (%"+str(int(rate))+")")
+                p = p + method+":"+str(succ+fail)+"/"+str(fail)+" (%"+str(int(rate))+")\n"
                 if method in STRATUM_GLOBALS["err"]:
                     for errkey in STRATUM_GLOBALS["err"][method]:
-                        print("     "+str(errkey)+":"+str(STRATUM_GLOBALS["err"][method][errkey]))
+                        p = p + "     "+str(errkey)+":"+str(STRATUM_GLOBALS["err"][method][errkey])+"\n"
             
-            print("")
-            print("\033[00m")
+            
+            p = p + "\n\033[00m\n"
+            print(p)
 
 def stratum_reconnect(dgn):
 
@@ -1610,6 +1634,44 @@ def standalone_miner(device_index):
 if __name__ == "__main__":
 
     screen_clear()
+
+
+
+
+
+
+
+    OCVCOIN_ADDR_TAKEN_FROM_ARG = None
+    if len(sys.argv) > 1:
+    
+        OCVCOIN_ADDR_TAKEN_FROM_ARG = sys.argv[1].strip()
+
+        OCVCOIN_ADDR_TAKEN_FROM_ARG = OCVCOIN_ADDR_TAKEN_FROM_ARG.strip("_")
+
+        OCVCOIN_ADDR_TAKEN_FROM_ARG = OCVCOIN_ADDR_TAKEN_FROM_ARG.strip()        
+        
+        print("\nAddress taken from arguments: "+OCVCOIN_ADDR_TAKEN_FROM_ARG)
+        
+        if check_addr(OCVCOIN_ADDR_TAKEN_FROM_ARG) != True:
+            OCVCOIN_ADDR_TAKEN_FROM_ARG = None
+            if sys.__stdin__.isatty():
+                print("Invalid ocvcoin address! Ignoring...")
+            else:
+                print("\n\nInvalid ocvcoin address!")
+                print("Please recheck the ocvcoin address at the end of the command!\n\n")
+                exit()
+
+
+    else:
+        if not sys.__stdin__.isatty():
+            print("\n\nPlease leave a space at the end of the command and add your ocvcoin address!\n\n")
+            exit()
+
+
+
+
+
+
     IS_NEW_VERSION_AVAILABLE = False
     try:           
         request = urllib.request.Request("https://raw.githubusercontent.com/ocvcoin/gpuminer/main/version.txt")
@@ -1622,6 +1684,9 @@ if __name__ == "__main__":
             IS_NEW_VERSION_AVAILABLE = True
     except Exception as e:
         print("\nNew version check failed! Skipping...\n")
+
+
+
 
 
 
@@ -1819,7 +1884,10 @@ if __name__ == "__main__":
         i = i + 1
     print(str(i) + " - ALL")    
     
-    selected_group_number = input().strip()
+    if sys.__stdin__.isatty():
+        selected_group_number = input().strip()
+    else:
+        selected_group_number = i
             
     if selected_group_number.isnumeric() == False or int(selected_group_number) < 1 or int(selected_group_number) > (len(device_groups)+1):
         print("Invalid group number!")
@@ -1842,25 +1910,26 @@ if __name__ == "__main__":
     
         if selected_group_name == "ALL" or selected_group_name == device_group_name:
         
-            
+            if OCVCOIN_ADDR_TAKEN_FROM_ARG != None:
+                addr = OCVCOIN_ADDR_TAKEN_FROM_ARG
+            else:
+                if check_addr(CONFIG[device_group_name]["reward_addr"]):
+                    addr = CONFIG[device_group_name]["reward_addr"]
+                    
+                else: 
+                    
+                    print("Requiring a reward address for "+device_group_name)
+                    print("\nYou can try wallet.ocvcoin.com to create a wallet and get an address!")
+                    addr = input("\nEnter your ocvcoin address:\n(you can right click & paste it)\n ")
+                    addr = addr.strip()
 
-            if check_addr(CONFIG[device_group_name]["reward_addr"]):
-                addr = CONFIG[device_group_name]["reward_addr"]
-                
-            else: 
-                
-                print("Requiring a reward address for "+device_group_name)
-                print("\nYou can try wallet.ocvcoin.com to create a wallet and get an address!")
-                addr = input("\nEnter your ocvcoin address:\n(you can right click & paste it)\n ")
-                addr = addr.strip()
 
+                    if check_addr(addr) != True:
+                        print("Wrong address. Address must be of bech32 type!")
+                        print("(It should start with ocv1)")
+                        exit()
 
-                if check_addr(addr) != True:
-                    print("Wrong address. Address must be of bech32 type!")
-                    print("(It should start with ocv1)")
-                    exit()
-
-                CONFIG[device_group_name]["reward_addr"] = addr        
+            CONFIG[device_group_name]["reward_addr"] = addr        
 
 
 
@@ -1918,8 +1987,12 @@ if __name__ == "__main__":
         print(str(i+1) + " - " + mining_method)
         i = i + 1
         
+
+    if sys.__stdin__.isatty():    
+        selected_mining_method = int(input().strip())
+    else:
+        selected_mining_method = 2
     
-    selected_mining_method = int(input().strip())
     
     if selected_mining_method > len(mining_methods_list) or selected_mining_method < 1:
         print("invalid method number!")
@@ -2019,8 +2092,10 @@ if __name__ == "__main__":
             
             i = i + 1
             
-        
-        selected_pool = int(input().strip())
+        if sys.__stdin__.isatty():
+            selected_pool = int(input().strip())
+        else:
+            selected_pool = 1
         
         if selected_pool > len(plst) or selected_pool < 1:
             print("invalid pool number!")
@@ -2167,8 +2242,8 @@ if __name__ == "__main__":
         threads_list.append(Thread(target=stratum_print_stats, args=[],daemon=True))            
 
 
-
-
+        if OCVCOIN_ADDR_TAKEN_FROM_ARG != None:
+            threads_list.append(Thread(target=stratum_print_url, args=[],daemon=True))
 
 
 
