@@ -72,7 +72,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.3.3"
+CURRENT_MINER_VERSION = "1.0.3.4"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -1658,7 +1658,11 @@ if __name__ == "__main__":
                 print("Invalid ocvcoin address! Ignoring...")
             else:
                 print("\n\nInvalid ocvcoin address!")
-                print("Please recheck the ocvcoin address at the end of the command!\n\n")
+                
+                if OCVCOIN_ADDR_TAKEN_FROM_ARG == "ADD_YOUR_OCVCOIN_ADDRESS_HERE":
+                    print("You forgot to change the ___ADD_YOUR_OCVCOIN_ADDRESS_HERE___ in the command!")
+                else:
+                    print("Please make sure your ocvcoin address at the end of the command is correct!\n\n")
                 exit()
 
 
@@ -1887,7 +1891,7 @@ if __name__ == "__main__":
     if sys.__stdin__.isatty():
         selected_group_number = input().strip()
     else:
-        selected_group_number = i
+        selected_group_number = str(i)
             
     if selected_group_number.isnumeric() == False or int(selected_group_number) < 1 or int(selected_group_number) > (len(device_groups)+1):
         print("Invalid group number!")
