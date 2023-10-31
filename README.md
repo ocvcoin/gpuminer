@@ -1,8 +1,4 @@
-# gpuminer
-
-Experimental GPU Miner for Ocvcoin
-
-Completely open source!
+# Experimental GPU miner for Ocvcoin
 
 
 ### Usage on Windows
@@ -14,7 +10,7 @@ Completely open source!
 - Run `start_mining.cmd`
 
 
-### Usage on Ubuntu, HiveOS, MacOS
+### Usage on Ubuntu, MacOS
 
 - Just run following command:
 
@@ -23,3 +19,7 @@ curl -o ~/run.sh https://raw.githubusercontent.com/ocvcoin/gpuminer/main/run.sh 
 ```
 
 dont forget to change: `___ADD_YOUR_OCVCOIN_ADDRESS_HERE___`
+
+### Usage on HiveOS
+
+HiveOS instructions: <https://github.com/ocvcoin/hiveos_gpuminer/blob/main/README.md>
