@@ -407,6 +407,41 @@ class cl_device_info(cl_uenum):
     CL_DEVICE_PRINTF_BUFFER_SIZE                = 0x1049
     CL_DEVICE_IMAGE_PITCH_ALIGNMENT             = 0x104A
     CL_DEVICE_IMAGE_BASE_ADDRESS_ALIGNMENT      = 0x104B
+    
+    CL_DEVICE_PCI_BUS_INFO_KHR                  = 0x410F
+    CL_DEVICE_PCIE_ID_AMD                       = 0x4034
+    CL_DEVICE_PCI_BUS_ID_NV                     = 0x4008
+    
+    
+    
+    
+class cl_device_pci_bus_info_khr(ctypes.Structure):
+
+    _fields_ = [('pci_domain', cl_uint),
+                ('pci_bus', cl_uint),
+                ('pci_device', cl_uint),
+                ('pci_function', cl_uint),]
+    def __repr__(self):
+        return "%s(%s, %s)" % (self.__class__.__name__,
+                               int(self.pci_domain),
+                               int(self.pci_bus),
+                               int(self.pci_device),
+                               int(self.pci_function))
+                               
+                               
+                               
+                               
+                                   
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
 class cl_device_fp_config(cl_bitfield):
     """
@@ -1376,6 +1411,12 @@ _device_info_types = {
     cl_device_info.CL_DRIVER_VERSION              : char_p,
     cl_device_info.CL_DEVICE_IMAGE_PITCH_ALIGNMENT : cl_uint, # guessed. not in docs
     cl_device_info.CL_DEVICE_IMAGE_BASE_ADDRESS_ALIGNMENT : cl_uint, # guessed. not in docs
+
+
+    cl_device_info.CL_DEVICE_PCI_BUS_INFO_KHR : P(cl_uint),     
+    cl_device_info.CL_DEVICE_PCIE_ID_AMD : cl_uint,
+    cl_device_info.CL_DEVICE_PCI_BUS_ID_NV : cl_uint
+    
 }
 
 def _infer_pytype(data, ctype):
