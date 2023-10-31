@@ -113,6 +113,6 @@ rm -rf ~/ocvcoin_gpuminer
 
 git clone https://github.com/ocvcoin/gpuminer.git ~/ocvcoin_gpuminer
 
-python3 ~/ocvcoin_gpuminer/ocvcoin_miner.py "$1"
+python3 ~/ocvcoin_gpuminer/ocvcoin_miner.py $@
 
 
