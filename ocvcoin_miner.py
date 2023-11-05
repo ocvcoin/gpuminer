@@ -74,7 +74,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.3.7"
+CURRENT_MINER_VERSION = "1.0.3.8"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -1480,10 +1480,12 @@ def ocl_mine_ocvcoin(device_index):
 
     for tx in block_template["transactions"]:
     
+        if (total_len + len(tx["data"])) > 750000:
+            continue
+    
         total_len = total_len + len(tx["data"])
         
-        if total_len > 750000: 
-            break
+
               
         txlist.append(tx["data"])
 
