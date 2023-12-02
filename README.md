@@ -1,11 +1,12 @@
 # Experimental GPU miner for Ocvcoin
 
+## IT CAN ONLY RUN EFFICIENTLY ON NVIDIA GPUs YET!!!
 
 ### Usage on Windows
 
-- Download & Unzip: <https://github.com/ocvcoin/gpuminer/archive/refs/heads/main.zip>
+- Download and extract zip file: <https://github.com/ocvcoin/gpuminer/archive/refs/heads/main.zip>
 
-- Read the instructions in `python_download_links.txt` & install python 3.6.0
+- Download & Install Python 3.6.0 <https://raw.githubusercontent.com/ocvcoin/gpuminer/main/python_download_links.txt>
 
 - Run `start_mining.cmd`
 
