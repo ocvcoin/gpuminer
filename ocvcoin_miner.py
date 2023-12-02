@@ -74,7 +74,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.3.8"
+CURRENT_MINER_VERSION = "1.0.3.9"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -966,6 +966,8 @@ def stratum_miner(device_index):
     global STRATUM_CONNECTIONS,PYCL_CTX,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL
 
     
+    build_kernel(device_index)
+    
     dgn = DEVICE_ID2GROUP[device_index]
     
 
@@ -1660,22 +1662,28 @@ def ocl_mine_ocvcoin(device_index):
             
 def build_kernel(device_index):
     
-    global PYCL_CTX,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL,DEVICE_LIST
+    global PYCL_CTX,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL,DEVICE_LIST,KERNEL_BUILD_LOCKS,DEVICE_ID2GROUP
 
     try:
-        cl_file = os.sep.join([os.path.dirname(os.path.abspath(__file__)),"ocv2_miner.cl"])
-        printd(device_index,"Building source...")
-        with open(cl_file, 'rb') as file:
-            ocv2_miner_cl_source = file.read()
+    
+    
+        with KERNEL_BUILD_LOCKS[DEVICE_ID2GROUP[device_index]]:
+    
+    
+        
+            cl_file = os.sep.join([os.path.dirname(os.path.abspath(__file__)),"ocv2_miner.cl"])
+            printd(device_index,"Building source...")
+            with open(cl_file, 'rb') as file:
+                ocv2_miner_cl_source = file.read()
 
-        bopts = bytes(CONFIG[DEVICE_ID2GROUP[device_index]]["build_flags"], 'ascii')
+            bopts = bytes(CONFIG[DEVICE_ID2GROUP[device_index]]["build_flags"], 'ascii')
 
-        PYCL_CTX[device_index] = clCreateContext(devices=[DEVICE_LIST[device_index]])
-        PYCL_QUEUE[device_index] = clCreateCommandQueue(PYCL_CTX[device_index])
-        PYCL_PROGRAM[device_index] = clCreateProgramWithSource(PYCL_CTX[device_index], ocv2_miner_cl_source).build(bopts)
-        PYCL_KERNEL[device_index] = PYCL_PROGRAM[device_index]['search_hash']
-        PYCL_KERNEL[device_index].argtypes = (cl_uint,cl_uint,cl_mem,cl_mem,cl_mem,cl_mem)
-        printd(device_index,"Build complate!")
+            PYCL_CTX[device_index] = clCreateContext(devices=[DEVICE_LIST[device_index]])
+            PYCL_QUEUE[device_index] = clCreateCommandQueue(PYCL_CTX[device_index])
+            PYCL_PROGRAM[device_index] = clCreateProgramWithSource(PYCL_CTX[device_index], ocv2_miner_cl_source).build(bopts)
+            PYCL_KERNEL[device_index] = PYCL_PROGRAM[device_index]['search_hash']
+            PYCL_KERNEL[device_index].argtypes = (cl_uint,cl_uint,cl_mem,cl_mem,cl_mem,cl_mem)
+            printd(device_index,"Build complate!")
 
     except Exception as e:
         printd(device_index,"Build fail!")
@@ -1687,7 +1695,7 @@ def standalone_miner(device_index):
     global LATEST_BLOCK_TEMPLATE,LATEST_TARGET_HEIGHT,PYCL_CTX,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL
 
     
-    
+    build_kernel(device_index)
     
 
     while True:
@@ -2178,6 +2186,8 @@ if __name__ == "__main__":
     del new_group
     del default_configs
 
+    print("IT CAN ONLY RUN EFFICIENTLY ON NVIDIA GPUs YET!!!\n")
+
     print("Device Group Selection")
     print("Please enter group number:")  
     i = 1
@@ -2615,7 +2625,7 @@ if __name__ == "__main__":
                 threads_list.append(Thread(target=stratum_listen_lines, args=[device_group_name],daemon=True))
                 
                 for device_index in device_groups[device_group_name]:  
-                    build_kernel(device_index)            
+                                
                     threads_list.append(Thread(target=stratum_miner, args=[device_index],daemon=True))
                     DEVICEID2STATINDEX[device_index] = i
                     i = i + 1
@@ -2701,7 +2711,7 @@ if __name__ == "__main__":
             if selected_group_name == "ALL" or selected_group_name == device_group_name:
                 
                 for device_index in device_groups[device_group_name]:            
-                    build_kernel(device_index)
+                    
                     threads_list.append(Thread(target=standalone_miner, args=[device_index],daemon=True))
 
 
@@ -2731,8 +2741,10 @@ if __name__ == "__main__":
     for _key in DEVICEID2STATINDEX:
         GLOBAL_STATS["bus_numbers"][DEVICEID2STATINDEX[_key]] = DEVICE_BUS_LIST[_key]
 
-
-
+    KERNEL_BUILD_LOCKS = {}
+    for device_group_name in device_groups:    
+        if selected_group_name == "ALL" or selected_group_name == device_group_name:
+            KERNEL_BUILD_LOCKS[device_group_name] = threading.Lock()
 
 
     # Start all threads
