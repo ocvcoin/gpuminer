@@ -4,11 +4,11 @@
 
 ### Usage on Windows
 
-- Download and extract zip file: <https://github.com/ocvcoin/gpuminer/archive/refs/heads/main.zip>
+- Download & Install Python 3.6.0: <https://raw.githubusercontent.com/ocvcoin/gpuminer/main/python_download_links.txt>
 
-- Download & Install Python 3.6.0 <https://raw.githubusercontent.com/ocvcoin/gpuminer/main/python_download_links.txt>
+- Download & Extract zip file: <https://github.com/ocvcoin/gpuminer/archive/refs/heads/main.zip>
 
-- Run `start_mining.cmd`
+- Right Click & Open `start_mining.cmd`
 
 
 ### Usage on Ubuntu, MacOS
