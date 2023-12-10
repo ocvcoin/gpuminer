@@ -74,7 +74,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.3.9"
+CURRENT_MINER_VERSION = "1.0.4.0"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -2196,7 +2196,7 @@ if __name__ == "__main__":
         i = i + 1
     print(str(i) + " - ALL")    
     
-    if sys.__stdin__.isatty():
+    if sys.__stdin__.isatty() and not PRGARGS.enable_telemetry_api:
         selected_group_number = input().strip()
     else:
         selected_group_number = str(i)
@@ -2332,7 +2332,7 @@ if __name__ == "__main__":
                 
         else:    
             
-            if sys.__stdin__.isatty():    
+            if sys.__stdin__.isatty() and not PRGARGS.enable_telemetry_api:    
                 selected_mining_method = int(input().strip())
             else:
                 selected_mining_method = 2
@@ -2436,7 +2436,7 @@ if __name__ == "__main__":
                 
                 i = i + 1
                 
-            if sys.__stdin__.isatty():
+            if sys.__stdin__.isatty() and not PRGARGS.enable_telemetry_api:
                 selected_pool = int(input().strip())
             else:
                 selected_pool = 1
@@ -2507,7 +2507,7 @@ if __name__ == "__main__":
             print("\nWorker Name Selection")
             print("Please enter a worker name:")            
     
-            if sys.__stdin__.isatty():
+            if sys.__stdin__.isatty() and not PRGARGS.enable_telemetry_api:
 
             
                 CONFIG["WORKER"]["worker_name"] = input().strip()
