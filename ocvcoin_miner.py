@@ -74,7 +74,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.4.0"
+CURRENT_MINER_VERSION = "1.0.4.1"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -558,7 +558,7 @@ def stratum_suggest_target(dgn):
 
 def stratum_process_line(dgn,line):
 
-    global STRATUM_GLOBALS,STRATUM_CONNECTIONS,GLOBAL_STATS
+    global STRATUM_GLOBALS,STRATUM_CONNECTIONS,GLOBAL_STATS,RPCID2DEVICEINDEX_ARR,DEVICEID2INVALIDSHARES
     
     #print(line)
     
@@ -604,6 +604,15 @@ def stratum_process_line(dgn,line):
             
             if method == "mining.submit":
                 GLOBAL_STATS["ar"][1] = GLOBAL_STATS["ar"][1] + 1
+                try:
+                    device_index = RPCID2DEVICEINDEX_ARR[int(response["id"])]
+                    if device_index not in DEVICEID2INVALIDSHARES:
+                        DEVICEID2INVALIDSHARES[device_index] = 1
+                    else:
+                        DEVICEID2INVALIDSHARES[device_index] = DEVICEID2INVALIDSHARES[device_index] + 1
+                    del RPCID2DEVICEINDEX_ARR[int(response["id"])]    
+                except Exception as e:
+                    pass
         
             if method not in STRATUM_GLOBALS["err"]:
                 STRATUM_GLOBALS["err"][method] = {}
@@ -698,7 +707,7 @@ def stratum_listen_lines(dgn):
 _loop_start_val = {} 
 def stratum_ocl_mine_ocvcoin(device_index):       
     
-    global STRATUM_CONNECTIONS,PYCL_QUEUE,PYCL_KERNEL,MAX_HASHRATE,_loop_start_val,GLOBAL_STATS
+    global STRATUM_CONNECTIONS,PYCL_QUEUE,PYCL_KERNEL,MAX_HASHRATE,_loop_start_val,GLOBAL_STATS,RPCID2DEVICEINDEX_ARR
     
 
     dgn = DEVICE_ID2GROUP[device_index]
@@ -862,6 +871,8 @@ def stratum_ocl_mine_ocvcoin(device_index):
             STRATUM_GLOBALS["id2method"][req_id] = "mining.submit"
             
             payload = '{"params": ["'+STRATUM_CONNECTIONS[dgn]["worker_name"]+'", "'+str(job_id)+'", "'+ extranonce2 +'", "'+str(ntime)+'", "'+send_nonce+'"], "id": '+str(req_id)+', "method": "mining.submit"}\n'
+            
+            RPCID2DEVICEINDEX_ARR[req_id] = device_index
             
             while True:
                 try:            
@@ -1341,9 +1352,9 @@ def rpc_getblocktemplate():
     
     return ret
 
-def rpc_submitblock(block_submission):
+def rpc_submitblock(block_submission,device_index):
     
-    global GLOBAL_STATS
+    global GLOBAL_STATS,DEVICEID2INVALIDSHARES
     
     divider = len(RPC_SERVERS)
     i = divider
@@ -1372,6 +1383,12 @@ def rpc_submitblock(block_submission):
                 soft_errors[rpcindex] = 1        
         if len(soft_errors) == divider:
             GLOBAL_STATS["ar"][1] = GLOBAL_STATS["ar"][1] + 1
+            
+            if device_index not in DEVICEID2INVALIDSHARES:
+                DEVICEID2INVALIDSHARES[device_index] = 1
+            else:
+                DEVICEID2INVALIDSHARES[device_index] = DEVICEID2INVALIDSHARES[device_index] + 1            
+            
             raise TypeError("rpc_submitblock soft_errors") 
         
         if len(network_errors) == divider:
@@ -1380,16 +1397,35 @@ def rpc_submitblock(block_submission):
                 is_max_err_count_reached = is_max_err_count_reached and (network_errors[x] > 4)
             if is_max_err_count_reached:
                 GLOBAL_STATS["ar"][1] = GLOBAL_STATS["ar"][1] + 1
+                
+                if device_index not in DEVICEID2INVALIDSHARES:
+                    DEVICEID2INVALIDSHARES[device_index] = 1
+                else:
+                    DEVICEID2INVALIDSHARES[device_index] = DEVICEID2INVALIDSHARES[device_index] + 1                
+                
                 raise TypeError("rpc_submitblock network_errors")
         
         for x in soft_errors:
             if soft_errors[x] > 8:
                 GLOBAL_STATS["ar"][1] = GLOBAL_STATS["ar"][1] + 1
+                
+                if device_index not in DEVICEID2INVALIDSHARES:
+                    DEVICEID2INVALIDSHARES[device_index] = 1
+                else:
+                    DEVICEID2INVALIDSHARES[device_index] = DEVICEID2INVALIDSHARES[device_index] + 1                
+                
                 raise TypeError("rpc_submitblock soft_error")
 
         for x in network_errors:
             if network_errors[x] > 8:
                 GLOBAL_STATS["ar"][1] = GLOBAL_STATS["ar"][1] + 1
+                
+                if device_index not in DEVICEID2INVALIDSHARES:
+                    DEVICEID2INVALIDSHARES[device_index] = 1
+                else:
+                    DEVICEID2INVALIDSHARES[device_index] = DEVICEID2INVALIDSHARES[device_index] + 1                
+                
+                
                 raise TypeError("rpc_submitblock network_error")
         
         if rpcindex == (divider - 1):
@@ -1580,7 +1616,7 @@ def ocl_mine_ocvcoin(device_index):
             printd(device_index,"found! submitting: {}\n".format(submission[0:160]))  
   
             
-            rpc_submitblock(submission)
+            rpc_submitblock(submission,device_index)
             LATEST_TARGET_HEIGHT = int(block_template["height"])
             
             clReleaseMemObject(target_diff_buf)
@@ -1753,7 +1789,8 @@ def standalone_miner(device_index):
 
 
 
-
+def hs_to_khs(x):
+  return int(x/1000)
 
 
 
@@ -1769,7 +1806,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
     def handle(self):
     
-        global GLOBAL_STATS
+        global GLOBAL_STATS,MINING_START_TIME,DEVICE_BUS_LIST,DEVICEID2INVALIDSHARES
     
         req = bytearray()
         
@@ -1797,7 +1834,35 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         try:
             command = req.decode(encoding="ascii",errors="ignore").strip()
             if command == "hiveos_stats": #for hiveOS
-                self.request.sendall(json.dumps(GLOBAL_STATS).encode(encoding="ascii",errors="ignore") + b'\r\n') 
+            
+                all_stats = GLOBAL_STATS
+                
+                all_stats["total_khs"] = int(sum(all_stats["hs"])/1000)
+                
+                all_stats["hs"] = map(hs_to_khs,all_stats["hs"])
+                
+                all_stats["hs_units"] = "khs"
+                
+                
+                all_stats["uptime"] = int(time.time()) - MINING_START_TIME
+                
+                all_stats["ar"][2] = all_stats["ar"][1]
+                
+                ar3 = ""
+                
+                for device_index in DEVICE_BUS_LIST:
+                    if len(str(DEVICE_BUS_LIST[device_index])) > 0:
+                    
+                        if device_index in DEVICEID2INVALIDSHARES:
+                            _device_invalid_shares = str(DEVICEID2INVALIDSHARES[device_index])
+                        else:
+                            _device_invalid_shares = "0"
+                        ar3 = ar3 + _device_invalid_shares + ";" + str(DEVICE_BUS_LIST[device_index]) + ";"
+                        
+                all_stats["ar"][3] = ar3.strip(";")
+                
+                self.request.sendall(json.dumps(all_stats).encode(encoding="ascii",errors="ignore") + b'\r\n') 
+                
             elif command == "hiveos_khs": #for hiveOS
                 self.request.sendall(str(int(sum(GLOBAL_STATS["hs"])/1000)).encode(encoding="ascii",errors="ignore") + b'\r\n')
                 
@@ -2719,15 +2784,15 @@ if __name__ == "__main__":
                     i = i + 1
                     
 
-
+    GLOBAL_STATS["total_khs"] = 0
 
     GLOBAL_STATS["hs"] = []
     GLOBAL_STATS["hs_units"] = "hs"
     #GLOBAL_STATS["temp"] = []
     #GLOBAL_STATS["fan"] = []
-    GLOBAL_STATS["uptime"] = int(time.time())
+    GLOBAL_STATS["uptime"] = 0
     GLOBAL_STATS["ver"] = CURRENT_MINER_VERSION
-    GLOBAL_STATS["ar"] = [0,0]
+    GLOBAL_STATS["ar"] = [0,0,0,""]
     GLOBAL_STATS["algo"] = "ocv2"
     GLOBAL_STATS["bus_numbers"] = []    
     
@@ -2746,7 +2811,13 @@ if __name__ == "__main__":
         if selected_group_name == "ALL" or selected_group_name == device_group_name:
             KERNEL_BUILD_LOCKS[device_group_name] = threading.Lock()
 
-
+    MINING_START_TIME = int(time.time())
+    
+    
+    RPCID2DEVICEINDEX_ARR = {}
+    DEVICEID2INVALIDSHARES = {}
+    
+    
     # Start all threads
     for th in threads_list:
         th.start()
