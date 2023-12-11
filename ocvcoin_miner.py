@@ -74,7 +74,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.4.1"
+CURRENT_MINER_VERSION = "1.0.4.2"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -1835,11 +1835,11 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             command = req.decode(encoding="ascii",errors="ignore").strip()
             if command == "hiveos_stats": #for hiveOS
             
-                all_stats = GLOBAL_STATS
+                all_stats = GLOBAL_STATS.copy()
                 
                 all_stats["total_khs"] = int(sum(all_stats["hs"])/1000)
                 
-                all_stats["hs"] = map(hs_to_khs,all_stats["hs"])
+                all_stats["hs"] = list(map(hs_to_khs,all_stats["hs"]))
                 
                 all_stats["hs_units"] = "khs"
                 
