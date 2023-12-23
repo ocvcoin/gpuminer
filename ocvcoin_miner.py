@@ -74,7 +74,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.4.2"
+CURRENT_MINER_VERSION = "1.0.4.3"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -117,6 +117,68 @@ Please restart Ocvcoin Core!
 MAX_HASHRATE = {}
 WORK_ID = 0
 LATEST_TARGET_HEIGHT = 0
+
+
+
+
+
+
+
+def print_mining_info():    
+    
+    global CONFIG,GLOBAL_STATS,DEVICEID2STATINDEX,DEVICE_NAMES,MAX_HASHRATE,DEVICEID2VALIDSHARES,DEVICEID2INVALIDSHARES,DEVICE_ID_2_AVG_HASHRATE,DEVICE_BUS_LIST,MINING_START_DATETIME
+
+
+    while True:
+        time.sleep(10)
+        ret = "\n"
+        if CONFIG["WORKER"]["worker_name"] != "":
+            ret = ret + "WORKER NAME:  "+CONFIG["WORKER"]["worker_name"]+"\n"
+        
+        ret = ret + "START TIME:   "+MINING_START_DATETIME+"\n"
+        __now = datetime.now()
+        curr = __now.strftime("%Y-%m-%d %H:%M:%S")         
+        ret = ret + "CURRENT TIME: "+curr+"\n\n"
+        
+           
+            
+        
+        ret = ret + "{:<8} {:<8} {:<8} {:<8} {:<8} {}\n".format('Now','Avg','Max',"Accept","Reject",'Device')
+        
+        
+        for device_index in DEVICEID2STATINDEX:
+            stat_index = DEVICEID2STATINDEX[device_index]
+ 
+            ret = ret + "{:<8} {:<8} {:<8} {:<8} {:<8} {}\n".format(
+            
+            GLOBAL_STATS["hs"][stat_index],
+            DEVICE_ID_2_AVG_HASHRATE[device_index],
+            MAX_HASHRATE[device_index],
+            DEVICEID2VALIDSHARES[device_index],
+            DEVICEID2INVALIDSHARES[device_index],
+            #DEVICE_BUS_LIST[device_index],
+            
+            DEVICE_NAMES[device_index].replace("FULL_PROFILE", "FP").replace("EMBEDDED_PROFILE", "EP")
+            
+            )
+
+        print(ret)
+
+
+
+           
+        
+            
+
+
+
+
+
+
+
+
+
+
 
 
 def build_merkle_root(coinbase_hash_bin, merkle_branch):
@@ -707,7 +769,7 @@ def stratum_listen_lines(dgn):
 _loop_start_val = {} 
 def stratum_ocl_mine_ocvcoin(device_index):       
     
-    global STRATUM_CONNECTIONS,PYCL_QUEUE,PYCL_KERNEL,MAX_HASHRATE,_loop_start_val,GLOBAL_STATS,RPCID2DEVICEINDEX_ARR
+    global STRATUM_CONNECTIONS,PYCL_QUEUE,PYCL_KERNEL,MAX_HASHRATE,_loop_start_val,GLOBAL_STATS,RPCID2DEVICEINDEX_ARR,DEVICEID2VALIDSHARES,DEVICE_ID_2_AVG_HASHRATE
     
 
     dgn = DEVICE_ID2GROUP[device_index]
@@ -787,7 +849,7 @@ def stratum_ocl_mine_ocvcoin(device_index):
 
        
         
-    printd(device_index,"starting to mine job_id: "+str(job_id))
+    #printd(device_index,"starting to mine job_id: "+str(job_id))
     
     
   
@@ -864,7 +926,7 @@ def stratum_ocl_mine_ocvcoin(device_index):
 
             
 
-            printd(device_index,"found! submitting: {}\n".format(nonce_bytes[0:4].hex()))  
+            #printd(device_index,"found! submitting: {}\n".format(nonce_bytes[0:4].hex()))  
   
             req_id = stratum_safe_rpc_id()
             
@@ -885,7 +947,7 @@ def stratum_ocl_mine_ocvcoin(device_index):
                     stratum_reconnect(dgn)
 
 
-
+            DEVICEID2VALIDSHARES[device_index] = DEVICEID2VALIDSHARES[device_index] + 1
             GLOBAL_STATS["ar"][0] = GLOBAL_STATS["ar"][0] + 1
 
             
@@ -906,10 +968,13 @@ def stratum_ocl_mine_ocvcoin(device_index):
             
             if MAX_HASHRATE[device_index] < hash_rate:
                 MAX_HASHRATE[device_index] = hash_rate
-                
+            
+
+            DEVICE_ID_2_AVG_HASHRATE[device_index] = total_hash_rate
+            
             GLOBAL_STATS["hs"][DEVICEID2STATINDEX[device_index]] = hash_rate    
                 
-            printd(device_index,"now: {}, avg: {}, max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE[device_index],loop_count))
+            #printd(device_index,"now: {}, avg: {}, max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE[device_index],loop_count))
             
              
             
@@ -938,7 +1003,7 @@ def stratum_ocl_mine_ocvcoin(device_index):
         
         
         if STRATUM_CONNECTIONS[dgn]["work_id"] != current_work_id:
-            printd(device_index,"new work detected!")
+            #printd(device_index,"new work detected!")
             clReleaseMemObject(target_diff_buf)
             clReleaseMemObject(init_img_buf)
             clReleaseMemObject(block_header_buf)
@@ -974,7 +1039,7 @@ def stratum_ocl_mine_ocvcoin(device_index):
 
 def stratum_miner(device_index):
     
-    global STRATUM_CONNECTIONS,PYCL_CTX,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL
+    global STRATUM_CONNECTIONS,PYCL_CTX,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL,DEVICE_ID_2_AVG_HASHRATE,MAX_HASHRATE,GLOBAL_STATS,DEVICEID2STATINDEX
 
     
     build_kernel(device_index)
@@ -1003,21 +1068,24 @@ def stratum_miner(device_index):
             except Exception as e:
                 pass
             try:
-                clReleaseKernel(PYCL_PROGRAM[device_index])
+                clReleaseProgram(PYCL_PROGRAM[device_index])
             except Exception as e:
                 pass                
             try:
-                clReleaseKernel(PYCL_QUEUE[device_index])
+                clReleaseCommandQueue(PYCL_QUEUE[device_index])
             except Exception as e:
                 pass                
             try:
-                clReleaseKernel(PYCL_CTX[device_index])
+                clReleaseContext(PYCL_CTX[device_index])
             except Exception as e:
                 pass                
                 
-                
-                
-                
+            try:    
+                DEVICE_ID_2_AVG_HASHRATE[device_index] = 0
+                MAX_HASHRATE[device_index] = 0
+                GLOBAL_STATS["hs"][DEVICEID2STATINDEX[device_index]] = 0                
+            except Exception as e:
+                pass                 
                 
             build_kernel(device_index)
             
@@ -1153,10 +1221,16 @@ def create_coinbase_via_bech32_addr(height, bech32_addr, coinbasevalue, coinbase
     #accepts bech32 & bech32m addresses
     
     
-       
+    final_coinbase_msg = bytes(script_BIP34_coinbase_height(height))
+    if len(final_coinbase_msg) < 100:
+        final_coinbase_msg = final_coinbase_msg + bytes(coinbasemsg, 'utf-8')[:(100 - len(final_coinbase_msg))]
+
+    
+    if len(final_coinbase_msg) < 100:
+        final_coinbase_msg = final_coinbase_msg + hashlib.sha512(secrets.token_bytes(256)+EXTRA_SEED).digest()[:(100 - len(final_coinbase_msg))]
     
     coinbase = CTransaction()
-    coinbase.vin.append(CTxIn(COutPoint(0, 0xffffffff), bytes(script_BIP34_coinbase_height(height))+hashlib.sha256(secrets.token_bytes(256)+EXTRA_SEED).digest()[:16]+bytes(coinbasemsg, 'utf-8')[:76], 0xffffffff))
+    coinbase.vin.append(CTxIn(COutPoint(0, 0xffffffff), final_coinbase_msg, 0xffffffff))
     coinbaseoutput = CTxOut()
 
     coinbaseoutput.nValue = coinbasevalue
@@ -1354,7 +1428,7 @@ def rpc_getblocktemplate():
 
 def rpc_submitblock(block_submission,device_index):
     
-    global GLOBAL_STATS,DEVICEID2INVALIDSHARES
+    global GLOBAL_STATS,DEVICEID2INVALIDSHARES,DEVICEID2VALIDSHARES
     
     divider = len(RPC_SERVERS)
     i = divider
@@ -1370,6 +1444,7 @@ def rpc_submitblock(block_submission,device_index):
         
         if ret is None:
             GLOBAL_STATS["ar"][0] = GLOBAL_STATS["ar"][0] + 1
+            DEVICEID2VALIDSHARES[device_index] = DEVICEID2VALIDSHARES[device_index] + 1
             return
         elif ret == False:
             if rpcindex in network_errors[rpcindex]:
@@ -1455,7 +1530,7 @@ def int2lehex(value, width):
 _loop_start_val = {} 
 def ocl_mine_ocvcoin(device_index):       
     
-    global PYCL_QUEUE,PYCL_KERNEL,MAX_HASHRATE,WORK_ID,LATEST_BLOCK_TEMPLATE,LATEST_TARGET_HEIGHT,_loop_start_val,GLOBAL_STATS
+    global PYCL_QUEUE,PYCL_KERNEL,MAX_HASHRATE,WORK_ID,LATEST_BLOCK_TEMPLATE,LATEST_TARGET_HEIGHT,_loop_start_val,GLOBAL_STATS,DEVICE_ID_2_AVG_HASHRATE
     
 
     if device_index not in _loop_start_val:
@@ -1643,10 +1718,13 @@ def ocl_mine_ocvcoin(device_index):
             
             if MAX_HASHRATE[device_index] < hash_rate:
                 MAX_HASHRATE[device_index] = hash_rate
+
+
+            DEVICE_ID_2_AVG_HASHRATE[device_index] = total_hash_rate
                 
             GLOBAL_STATS["hs"][DEVICEID2STATINDEX[device_index]] = hash_rate     
                 
-            printd(device_index,"Now: {}, Avg: {}, Max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE[device_index],loop_count))
+            #printd(device_index,"Now: {}, Avg: {}, Max: {} hash/s (loop_count:{})".format(hash_rate,total_hash_rate,MAX_HASHRATE[device_index],loop_count))
             
              
             
@@ -1700,35 +1778,61 @@ def build_kernel(device_index):
     
     global PYCL_CTX,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL,DEVICE_LIST,KERNEL_BUILD_LOCKS,DEVICE_ID2GROUP
 
-    try:
-    
-    
-        with KERNEL_BUILD_LOCKS[DEVICE_ID2GROUP[device_index]]:
-    
-    
+
+    while True:
+
+        try:
         
-            cl_file = os.sep.join([os.path.dirname(os.path.abspath(__file__)),"ocv2_miner.cl"])
-            printd(device_index,"Building source...")
-            with open(cl_file, 'rb') as file:
-                ocv2_miner_cl_source = file.read()
+        
+            with KERNEL_BUILD_LOCKS[DEVICE_ID2GROUP[device_index]]:
+        
+        
+            
+                cl_file = os.sep.join([os.path.dirname(os.path.abspath(__file__)),"ocv2_miner.cl"])
+                printd(device_index,"Building source...")
+                with open(cl_file, 'rb') as file:
+                    ocv2_miner_cl_source = file.read()
 
-            bopts = bytes(CONFIG[DEVICE_ID2GROUP[device_index]]["build_flags"], 'ascii')
+                bopts = bytes(CONFIG[DEVICE_ID2GROUP[device_index]]["build_flags"], 'ascii')
 
-            PYCL_CTX[device_index] = clCreateContext(devices=[DEVICE_LIST[device_index]])
-            PYCL_QUEUE[device_index] = clCreateCommandQueue(PYCL_CTX[device_index])
-            PYCL_PROGRAM[device_index] = clCreateProgramWithSource(PYCL_CTX[device_index], ocv2_miner_cl_source).build(bopts)
-            PYCL_KERNEL[device_index] = PYCL_PROGRAM[device_index]['search_hash']
-            PYCL_KERNEL[device_index].argtypes = (cl_uint,cl_uint,cl_mem,cl_mem,cl_mem,cl_mem)
-            printd(device_index,"Build complate!")
+                PYCL_CTX[device_index] = clCreateContext(devices=[DEVICE_LIST[device_index]])
+                PYCL_QUEUE[device_index] = clCreateCommandQueue(PYCL_CTX[device_index])
+                PYCL_PROGRAM[device_index] = clCreateProgramWithSource(PYCL_CTX[device_index], ocv2_miner_cl_source).build(bopts)
+                PYCL_KERNEL[device_index] = PYCL_PROGRAM[device_index]['search_hash']
+                PYCL_KERNEL[device_index].argtypes = (cl_uint,cl_uint,cl_mem,cl_mem,cl_mem,cl_mem)
+                printd(device_index,"Build complate!")
+                break
 
-    except Exception as e:
-        printd(device_index,"Build fail!")
-        printd(device_index,repr(e))
-        exit()
+        except Exception as e:
+            printd(device_index,"Build fail!")
+            printd(device_index,repr(e))
+            
+            time.sleep(1)
+            
+            try:
+                clReleaseKernel(PYCL_KERNEL[device_index])
+            except Exception as e:
+                pass
+            try:
+                clReleaseProgram(PYCL_PROGRAM[device_index])
+            except Exception as e:
+                pass                
+            try:
+                clReleaseCommandQueue(PYCL_QUEUE[device_index])
+            except Exception as e:
+                pass                
+            try:
+                clReleaseContext(PYCL_CTX[device_index])
+            except Exception as e:
+                pass             
+            
+            
+            
+            time.sleep(5)
 
 def standalone_miner(device_index):
     
-    global LATEST_BLOCK_TEMPLATE,LATEST_TARGET_HEIGHT,PYCL_CTX,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL
+    global LATEST_BLOCK_TEMPLATE,LATEST_TARGET_HEIGHT,PYCL_CTX,PYCL_QUEUE,PYCL_PROGRAM,PYCL_KERNEL,DEVICE_ID_2_AVG_HASHRATE,MAX_HASHRATE,GLOBAL_STATS,DEVICEID2STATINDEX
 
     
     build_kernel(device_index)
@@ -1751,20 +1855,25 @@ def standalone_miner(device_index):
             except Exception as e:
                 pass
             try:
-                clReleaseKernel(PYCL_PROGRAM[device_index])
+                clReleaseProgram(PYCL_PROGRAM[device_index])
             except Exception as e:
                 pass                
             try:
-                clReleaseKernel(PYCL_QUEUE[device_index])
+                clReleaseCommandQueue(PYCL_QUEUE[device_index])
             except Exception as e:
                 pass                
             try:
-                clReleaseKernel(PYCL_CTX[device_index])
+                clReleaseContext(PYCL_CTX[device_index])
             except Exception as e:
                 pass                
                 
                 
-                
+            try:    
+                DEVICE_ID_2_AVG_HASHRATE[device_index] = 0
+                MAX_HASHRATE[device_index] = 0
+                GLOBAL_STATS["hs"][DEVICEID2STATINDEX[device_index]] = 0                
+            except Exception as e:
+                pass                
                 
                 
             build_kernel(device_index)
@@ -2420,8 +2529,10 @@ if __name__ == "__main__":
             plst.append(["Mining4People.com Canada"      ,"na.mining4people.com" ,3376,3379,23376,23379,0 ])
             plst.append(["Mining4People.com Finland"     ,"fi.mining4people.com" ,3376,3379,23376,23379,0 ])
             plst.append(["Mining4People.com India"       ,"in.mining4people.com" ,3376,3379,23376,23379,0 ])
+            plst.append(["Mining4People.com Singapore"       ,"sg.mining4people.com" ,3376,3379,23376,23379,0 ])
 
-        if len(HOSTPORT_ARR) != 2 or "mining4people" not in HOSTPORT_ARR[0]:
+        #if len(HOSTPORT_ARR) != 2 or "mining4people" not in HOSTPORT_ARR[0]: #phalanxmine closed
+        if len(HOSTPORT_ARR) == 2 and "phalanxmine" in HOSTPORT_ARR[0]:
             plst.append(["pool.PhalanxMine.com Sweden",	      "se-stratum.phalanxmine.com" ,5120,5120,25120,25120,0 ])	
             plst.append(["pool.PhalanxMine.com Singapore", 	  "sg-stratum.phalanxmine.com" ,5120,5120,25120,25120,0 ])	
             plst.append(["pool.PhalanxMine.com United States","us-stratum.phalanxmine.com" ,5120,5120,25120,25120,0 ])	
@@ -2797,14 +2908,27 @@ if __name__ == "__main__":
     GLOBAL_STATS["bus_numbers"] = []    
     
     
+
+    
     for _key in DEVICEID2STATINDEX:
         GLOBAL_STATS["hs"].append(0)
         #GLOBAL_STATS["temp"].append(0)
         #GLOBAL_STATS["fan"].append(0)
         GLOBAL_STATS["bus_numbers"].append(0)
         
+      
+
+    DEVICEID2VALIDSHARES = {}
+    DEVICEID2INVALIDSHARES = {}
+    DEVICE_ID_2_AVG_HASHRATE = {}
+        
+        
     for _key in DEVICEID2STATINDEX:
         GLOBAL_STATS["bus_numbers"][DEVICEID2STATINDEX[_key]] = DEVICE_BUS_LIST[_key]
+        DEVICEID2VALIDSHARES[_key] = 0
+        DEVICEID2INVALIDSHARES[_key] = 0
+        DEVICE_ID_2_AVG_HASHRATE[_key] = 0
+        MAX_HASHRATE[_key] = 0
 
     KERNEL_BUILD_LOCKS = {}
     for device_group_name in device_groups:    
@@ -2815,7 +2939,12 @@ if __name__ == "__main__":
     
     
     RPCID2DEVICEINDEX_ARR = {}
-    DEVICEID2INVALIDSHARES = {}
+    
+    __now = datetime.now()
+    MINING_START_DATETIME = __now.strftime("%Y-%m-%d %H:%M:%S")
+    
+    
+    threads_list.append(Thread(target=print_mining_info, args=[],daemon=True))
     
     
     # Start all threads
