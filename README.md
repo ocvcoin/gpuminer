@@ -27,6 +27,6 @@ curl -o ~/run.sh https://raw.githubusercontent.com/ocvcoin/gpuminer/main/run.sh 
 - Click to Import from `File` button and import ocvcoin-gpuminer.flight-sheet.json 
 - Select or Add a wallet
 - Click `Create Flight Sheet` button
-- Go to Worker's `Flight Sheet` tab and run imported `Flight Sheet`
+- Go to Worker's `Flight Sheet` tab and run created `Flight Sheet`
 
 
