@@ -18,7 +18,7 @@ import re
 import configparser
 import math
 
-
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pycl import *
 from pycl import _dll_filename
 from array import array
@@ -74,7 +74,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.4.3"
+CURRENT_MINER_VERSION = "1.0.4.4"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -126,7 +126,7 @@ LATEST_TARGET_HEIGHT = 0
 
 def print_mining_info():    
     
-    global CONFIG,GLOBAL_STATS,DEVICEID2STATINDEX,DEVICE_NAMES,MAX_HASHRATE,DEVICEID2VALIDSHARES,DEVICEID2INVALIDSHARES,DEVICE_ID_2_AVG_HASHRATE,DEVICE_BUS_LIST,MINING_START_DATETIME
+    global CONFIG,GLOBAL_STATS,DEVICEID2STATINDEX,DEVICE_NAMES,MAX_HASHRATE,DEVICEID2VALIDSHARES,DEVICEID2INVALIDSHARES,DEVICE_ID_2_AVG_HASHRATE,DEVICE_BUS_LIST,MINING_START_DATETIME,MINING_START_TIMESTAMP
 
 
     while True:
@@ -138,12 +138,13 @@ def print_mining_info():
         ret = ret + "START TIME:   "+MINING_START_DATETIME+"\n"
         __now = datetime.now()
         curr = __now.strftime("%Y-%m-%d %H:%M:%S")         
-        ret = ret + "CURRENT TIME: "+curr+"\n\n"
+        ret = ret + "CURRENT TIME: "+curr+"\n"
         
-           
+        elapsed=__now-MINING_START_TIMESTAMP
+        ret = ret + "ELAPSED TIME: %d days, %02d hours, %02d minutes, %02d seconds\n\n" % (elapsed.days, elapsed.seconds // 3600, elapsed.seconds // 60 % 60, elapsed.seconds % 60)           
             
         
-        ret = ret + "{:<8} {:<8} {:<8} {:<8} {:<8} {}\n".format('Now','Avg','Max',"Accept","Reject",'Device')
+        ret = ret + "{:<8} {:<8} {:<8} {:<8} {:<8} {}\n".format('Now(H/s)','Avg(H/s)','Max(H/s)',"Accept","Reject",'Device')
         
         
         for device_index in DEVICEID2STATINDEX:
@@ -312,12 +313,16 @@ def stratum_print_url():
     
         if STRATUM_GLOBALS["port"] in m4p_solo_ports:
         
+            m4p_pool_uname = "ocvcoin-solo"
+        
             if OCVCOIN_ADDR_TAKEN_FROM_ARG != None:
                 pool_page = "https://mining4people.com/pool/ocvcoin-solo/account/"+OCVCOIN_ADDR_TAKEN_FROM_ARG
             else:
                 pool_page = "https://mining4people.com/pool/ocvcoin-solo"    
                 
         else:
+        
+            m4p_pool_uname = "ocvcoinpplns"
         
             if OCVCOIN_ADDR_TAKEN_FROM_ARG != None:
                 pool_page = "https://mining4people.com/pool/ocvcoinpplns/account/"+OCVCOIN_ADDR_TAKEN_FROM_ARG
@@ -343,41 +348,41 @@ def stratum_print_url():
         if GLOBAL_STATS["ar"][0] > 100:
         
             if "mining4people" in STRATUM_GLOBALS["host"]:
-                if STRATUM_GLOBALS["port"] not in m4p_solo_ports:        
+                    
 
 
-                    for device_group_name in STRATUM_CONNECTIONS:
-                        if CONFIG[device_group_name]["reward_addr"] not in __m4p_min_pay_already_set_list:
+                for device_group_name in STRATUM_CONNECTIONS:
+                    if CONFIG[device_group_name]["reward_addr"] not in __m4p_min_pay_already_set_list:
 
 
-                            try:
+                        try:
 
 
-                                external_ip = urllib.request.urlopen('https://checkip.amazonaws.com/').read().decode('ascii').strip()
+                            external_ip = urllib.request.urlopen('https://checkip.amazonaws.com/').read().decode('ascii').strip()
 
 
-                                data = json.dumps({"ipAddress":external_ip,"settings":{"paymentThreshold":10}}).encode()
-                                request = urllib.request.Request("https://mining4people.com/api/pools/ocvcoinpplns/account/"+CONFIG[device_group_name]["reward_addr"]+"/settings",data,headers={
-                                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0",
-                                    "Accept": "application/json",
-                                    "Accept-Language": "en-US,en;q=0.5",
-                                    "Content-Type": "application/json",
-                                    "Sec-Fetch-Dest": "empty",
-                                    "Sec-Fetch-Mode": "cors",
-                                    "Sec-Fetch-Site": "same-origin",
-                                    "Pragma": "no-cache",
-                                    "Cache-Control": "no-cache"
-                                })
-                                sslfix_context = ssl._create_unverified_context()        
-                                f = urllib.request.urlopen(request,context=sslfix_context,timeout=20)
-                                
+                            data = json.dumps({"ipAddress":external_ip,"settings":{"paymentThreshold":10}}).encode()
+                            request = urllib.request.Request("https://mining4people.com/api/pools/"+m4p_pool_uname+"/account/"+CONFIG[device_group_name]["reward_addr"]+"/settings",data,headers={
+                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0",
+                                "Accept": "application/json",
+                                "Accept-Language": "en-US,en;q=0.5",
+                                "Content-Type": "application/json",
+                                "Sec-Fetch-Dest": "empty",
+                                "Sec-Fetch-Mode": "cors",
+                                "Sec-Fetch-Site": "same-origin",
+                                "Pragma": "no-cache",
+                                "Cache-Control": "no-cache"
+                            })
+                            sslfix_context = ssl._create_unverified_context()        
+                            f = urllib.request.urlopen(request,context=sslfix_context,timeout=20)
                             
-                                time.sleep(10)
-                                
-                                
-                                __m4p_min_pay_already_set_list[CONFIG[device_group_name]["reward_addr"]] == True
-                            except Exception as e:
-                                pass   
+                        
+                            time.sleep(10)
+                            
+                            
+                            __m4p_min_pay_already_set_list[CONFIG[device_group_name]["reward_addr"]] == True
+                        except Exception as e:
+                            pass   
 
 
 
@@ -1242,7 +1247,7 @@ def create_coinbase_via_bech32_addr(height, bech32_addr, coinbasevalue, coinbase
     elif address_decoded[0] == 1:
         req_opcode = bytes(b'\x51')
     else:
-        exit("address not supported!")
+        sys.exit("address not supported!")
     
     
     coinbaseoutput.scriptPubKey = req_opcode + int2lehex(len(address_decoded[1]), 1) + bytes(address_decoded[1])
@@ -2092,13 +2097,13 @@ if __name__ == "__main__":
                     print("You forgot to change the ___ADD_YOUR_OCVCOIN_ADDRESS_HERE___ in the command!")
                 else:
                     print("Please make sure your ocvcoin address at the end of the command is correct!\n\n")
-                exit()
+                sys.exit()
 
 
     else:
         if not sys.__stdin__.isatty():
             print("\n\nPlease leave a space at the end of the command and add your ocvcoin address!\n\n")
-            exit()
+            sys.exit()
 
 
     if PRGARGS.url != None:
@@ -2175,8 +2180,9 @@ if __name__ == "__main__":
 
     
     
-    print("Python: "+sys.version)
-
+    print("Python Version: "+sys.version)
+    print("Python Location: "+sys.executable)
+    print("Miner Location: "+__file__)
     
     print("\nSettings file: %s\n" % config_file)
 
@@ -2190,13 +2196,13 @@ if __name__ == "__main__":
         print("Make sure the GPU drivers are installed!")
         print("This could be the cause of this error")
         
-        exit()
+        sys.exit()
 
     if len(platforms) < 1:
         print("No platforms supporting OpenCL were found!")
         print("Make sure the GPU drivers are installed!")
         print("This could be the cause of this error")
-        exit()
+        sys.exit()
 
     default_configs = {}
   
@@ -2336,7 +2342,7 @@ if __name__ == "__main__":
         print("Make sure the GPU drivers are installed!")
         print("This could be the cause of this error")
         print(device_search_errors)
-        exit()
+        sys.exit()
 
     DEVICE_ID2GROUP = {}
 
@@ -2377,7 +2383,7 @@ if __name__ == "__main__":
             
     if selected_group_number.isnumeric() == False or int(selected_group_number) < 1 or int(selected_group_number) > (len(device_groups)+1):
         print("Invalid group number!")
-        exit()        
+        sys.exit()        
     
     if int(selected_group_number) == (len(device_groups)+1):
         selected_group_name = "ALL"
@@ -2413,7 +2419,7 @@ if __name__ == "__main__":
                     if check_addr(addr) != True:
                         print("Wrong address. Address must be of bech32 type!")
                         print("(It should start with ocv1)")
-                        exit()
+                        sys.exit()
 
             CONFIG[device_group_name]["reward_addr"] = addr        
             if "uniq_id" not in CONFIG[device_group_name]:
@@ -2514,7 +2520,7 @@ if __name__ == "__main__":
             
             if selected_mining_method > len(mining_methods_list) or selected_mining_method < 1:
                 print("invalid method number!")
-                exit()
+                sys.exit()
         
     
     if selected_mining_method < 5:
@@ -2523,13 +2529,15 @@ if __name__ == "__main__":
 
         if len(HOSTPORT_ARR) != 2 or "phalanxmine" not in HOSTPORT_ARR[0]:
             #POOL NAME,HOSTNAME,PPLNS PORT,SOLO PORT,PPLNS SSL PORT,SOLO SSL PORT,PING
-            plst.append(["Mining4People.com Australia"   ,"au.mining4people.com" ,3376,3379,23376,23379,0 ])
+            #plst.append(["Mining4People.com Australia"   ,"au.mining4people.com" ,3376,3379,23376,23379,0 ])
             plst.append(["Mining4People.com Brazil"      ,"br.mining4people.com" ,3376,3379,23376,23379,0 ])
-            plst.append(["Mining4People.com Germany"     ,"de.mining4people.com" ,3376,3379,23376,23379,0 ])
+            #plst.append(["Mining4People.com Germany"     ,"de.mining4people.com" ,3376,3379,23376,23379,0 ])
             plst.append(["Mining4People.com Canada"      ,"na.mining4people.com" ,3376,3379,23376,23379,0 ])
             plst.append(["Mining4People.com Finland"     ,"fi.mining4people.com" ,3376,3379,23376,23379,0 ])
             plst.append(["Mining4People.com India"       ,"in.mining4people.com" ,3376,3379,23376,23379,0 ])
             plst.append(["Mining4People.com Singapore"       ,"sg.mining4people.com" ,3376,3379,23376,23379,0 ])
+            
+            plst.append(["Mining4People.com Europe"       ,"eu.mining4people.com" ,3376,3379,23376,23379,0 ])
 
         #if len(HOSTPORT_ARR) != 2 or "mining4people" not in HOSTPORT_ARR[0]: #phalanxmine closed
         if len(HOSTPORT_ARR) == 2 and "phalanxmine" in HOSTPORT_ARR[0]:
@@ -2619,7 +2627,7 @@ if __name__ == "__main__":
             
             if selected_pool > len(plst) or selected_pool < 1:
                 print("invalid pool number!")
-                exit()
+                sys.exit()
             
             
         
@@ -2940,8 +2948,8 @@ if __name__ == "__main__":
     
     RPCID2DEVICEINDEX_ARR = {}
     
-    __now = datetime.now()
-    MINING_START_DATETIME = __now.strftime("%Y-%m-%d %H:%M:%S")
+    MINING_START_TIMESTAMP = datetime.now()
+    MINING_START_DATETIME = MINING_START_TIMESTAMP.strftime("%Y-%m-%d %H:%M:%S")
     
     
     threads_list.append(Thread(target=print_mining_info, args=[],daemon=True))
