@@ -74,7 +74,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.4.4"
+CURRENT_MINER_VERSION = "1.0.4.5"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -2481,7 +2481,7 @@ if __name__ == "__main__":
     print("Mining Method Selection")
     print("Please enter a method number:")
 
-    mining_methods_list = ["POOL","POOL (SSL CONNECTION)","SOLO POOL","SOLO POOL (SSL CONNECTION)","SOLO (WITH OUR PUBLIC RPC)"]
+    mining_methods_list = ["POOL","POOL (SSL CONNECTION)","(M4P SOLO POOLS CURRENTLY INACTIVE!!!) SOLO POOL","(M4P SOLO POOLS CURRENTLY INACTIVE!!!) SOLO POOL (SSL CONNECTION)","SOLO (WITH OUR PUBLIC RPC)"]
     
     i = 0
     for mining_method in mining_methods_list:
@@ -2529,15 +2529,21 @@ if __name__ == "__main__":
 
         if len(HOSTPORT_ARR) != 2 or "phalanxmine" not in HOSTPORT_ARR[0]:
             #POOL NAME,HOSTNAME,PPLNS PORT,SOLO PORT,PPLNS SSL PORT,SOLO SSL PORT,PING
-            #plst.append(["Mining4People.com Australia"   ,"au.mining4people.com" ,3376,3379,23376,23379,0 ])
+            plst.append(["Mining4People.com Australia"   ,"au.mining4people.com" ,3376,3379,23376,23379,0 ])
             plst.append(["Mining4People.com Brazil"      ,"br.mining4people.com" ,3376,3379,23376,23379,0 ])
             #plst.append(["Mining4People.com Germany"     ,"de.mining4people.com" ,3376,3379,23376,23379,0 ])
-            plst.append(["Mining4People.com Canada"      ,"na.mining4people.com" ,3376,3379,23376,23379,0 ])
-            plst.append(["Mining4People.com Finland"     ,"fi.mining4people.com" ,3376,3379,23376,23379,0 ])
+            #plst.append(["Mining4People.com Canada"      ,"na.mining4people.com" ,3376,3379,23376,23379,0 ])
+            #plst.append(["Mining4People.com Finland"     ,"fi.mining4people.com" ,3376,3379,23376,23379,0 ])
             plst.append(["Mining4People.com India"       ,"in.mining4people.com" ,3376,3379,23376,23379,0 ])
-            plst.append(["Mining4People.com Singapore"       ,"sg.mining4people.com" ,3376,3379,23376,23379,0 ])
+            #plst.append(["Mining4People.com Singapore"       ,"sg.mining4people.com" ,3376,3379,23376,23379,0 ])
             
             plst.append(["Mining4People.com Europe"       ,"eu.mining4people.com" ,3376,3379,23376,23379,0 ])
+            
+            plst.append(["Mining4People.com Japan"       ,"jp.mining4people.com" ,3376,3379,23376,23379,0 ])
+            plst.append(["Mining4People.com US West"       ,"us-west.mining4people.com" ,3376,3379,23376,23379,0 ])
+            plst.append(["Mining4People.com US Cent"       ,"us-cent.mining4people.com" ,3376,3379,23376,23379,0 ])
+            plst.append(["Mining4People.com US East"       ,"us-east.mining4people.com" ,3376,3379,23376,23379,0 ])            
+            
 
         #if len(HOSTPORT_ARR) != 2 or "mining4people" not in HOSTPORT_ARR[0]: #phalanxmine closed
         if len(HOSTPORT_ARR) == 2 and "phalanxmine" in HOSTPORT_ARR[0]:
