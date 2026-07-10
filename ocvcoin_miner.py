@@ -74,7 +74,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.4.5"
+CURRENT_MINER_VERSION = "1.0.4.6"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -484,7 +484,7 @@ def stratum_reconnect(dgn):
                     stratum_authorize(dgn)
                     
                     pass_attr = getattr(PRGARGS, 'pass')
-                    if pass_attr != None and pass_attr != "" and not re.match(re.compile('.*?d=\d+.*?', re.UNICODE), pass_attr):                    
+                    if pass_attr != None and pass_attr != "" and not re.match(re.compile(r'.*?d=\d+.*?', re.UNICODE), pass_attr):                    
                         stratum_suggest_difficulty(dgn)
                         
                         
@@ -2131,6 +2131,7 @@ if __name__ == "__main__":
 
 
     print("Ocvcoin Gpu Miner v"+str(CURRENT_MINER_VERSION)+" starting...")
+    time.sleep(2)
     print(platform.uname())
 
 
@@ -2257,7 +2258,7 @@ if __name__ == "__main__":
                     except Exception as e:
                         pass
 
-                if not re.match(re.compile('^\d+$', re.UNICODE), device_bus):                
+                if not re.match(re.compile(r'^\d+$', re.UNICODE), device_bus):                
                     try:
                         device_bus = str(clGetDeviceInfo(d, cl_device_info.CL_DEVICE_PCI_BUS_ID_NV))
                     except Exception as e:
@@ -2267,7 +2268,7 @@ if __name__ == "__main__":
                             pass                
 
 
-                if not re.match(re.compile('^\d+$', re.UNICODE), device_bus):                
+                if not re.match(re.compile(r'^\d+$', re.UNICODE), device_bus):                
                     try:
                         device_bus = str(clGetDeviceInfo(d, cl_device_info.CL_DEVICE_PCIE_ID_AMD))
                     except Exception as e:
@@ -2291,7 +2292,7 @@ if __name__ == "__main__":
                 device_group_name = str(d.name) + " " + str(d.profile) + " " + max_compute_units + " " + max_clock_freq
                 
                 
-                device_group_name = re.sub(re.compile('\s+', re.UNICODE), ' ', device_group_name).strip()
+                device_group_name = re.sub(re.compile(r'\s+', re.UNICODE), ' ', device_group_name).strip()
                 
                 device_speeds[device_group_name] = (int(max_compute_units)*int(max_clock_freq))
                 
@@ -2303,7 +2304,7 @@ if __name__ == "__main__":
                 
 
                 device_full_name = "D"+str(len(device_groups[device_group_name]) - 1)+": "+ str(d.name) + " " + str(d.profile) + " " + max_compute_units + " " + max_clock_freq
-                device_full_name = re.sub(re.compile('\s+', re.UNICODE), ' ', device_full_name).strip()                
+                device_full_name = re.sub(re.compile(r'\s+', re.UNICODE), ' ', device_full_name).strip()                
                 
                 
                 
@@ -2481,7 +2482,7 @@ if __name__ == "__main__":
     print("Mining Method Selection")
     print("Please enter a method number:")
 
-    mining_methods_list = ["POOL","POOL (SSL CONNECTION)","(M4P SOLO POOLS CURRENTLY INACTIVE!!!) SOLO POOL","(M4P SOLO POOLS CURRENTLY INACTIVE!!!) SOLO POOL (SSL CONNECTION)","SOLO (WITH OUR PUBLIC RPC)"]
+    mining_methods_list = ["(PROBABLY NO LONGER AVAILABLE!!!) POOL","(PROBABLY NO LONGER AVAILABLE!!!) POOL (SSL CONNECTION)","(PROBABLY NO LONGER AVAILABLE!!!) SOLO POOL","(PROBABLY NO LONGER AVAILABLE!!!) SOLO POOL (SSL CONNECTION)","SOLO (WITH OUR PUBLIC RPC)"]
     
     i = 0
     for mining_method in mining_methods_list:
@@ -2495,7 +2496,7 @@ if __name__ == "__main__":
         
         HOSTPORT_ARR = PARSED_URL.netloc.lower().split(":",1)
         
-        if (PARSED_URL.scheme == "stratum+tcp" or PARSED_URL.scheme == "stratum+tcps") and len(HOSTPORT_ARR) == 2 and re.match(re.compile('^\d+$'),HOSTPORT_ARR[1]) and re.match(re.compile('^[a-z0-9-\.]+$'),HOSTPORT_ARR[0]):
+        if (PARSED_URL.scheme == "stratum+tcp" or PARSED_URL.scheme == "stratum+tcps") and len(HOSTPORT_ARR) == 2 and re.match(re.compile(r'^\d+$'),HOSTPORT_ARR[1]) and re.match(re.compile(r'^[a-z0-9-\.]+$'),HOSTPORT_ARR[0]):
         
             if HOSTPORT_ARR[0] == "pool.auto.select" or HOSTPORT_ARR[0] == "mining4people.auto.select" or HOSTPORT_ARR[0] == "phalanxmine.auto.select":
                 if PARSED_URL.scheme == "stratum+tcps":

@@ -314,6 +314,7 @@ class cl_errnum(cl_enum):
     CL_INVALID_PROPERTY =                         -64
 
     CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR =      -1000
+    CL_PLATFORM_NOT_FOUND_KHR =                   -1001    
 
 class cl_platform_info(cl_uenum):
     """
@@ -325,6 +326,7 @@ class cl_platform_info(cl_uenum):
     CL_PLATFORM_NAME =                            0x0902
     CL_PLATFORM_VENDOR =                          0x0903
     CL_PLATFORM_EXTENSIONS =                      0x0904
+    CL_PLATFORM_ICD_SUFFIX_KHR =                  0x0920    
 
 class cl_device_info(cl_uenum):
     """
@@ -915,8 +917,13 @@ if not _dll_filename:
     except ImportError:
         pass
 if _dll_filename:
-    try:
-        _dll = ctypes.cdll.LoadLibrary(_dll_filename)
+    try:        
+        if hasattr(ctypes, 'windll'):
+            # Assume that the presence of ctypes.windll indicates we're on Windows.
+            # In this case, we must use the stdcall calling convention.
+            _dll = ctypes.windll.LoadLibrary(_dll_filename)
+        else:
+            _dll = ctypes.cdll.LoadLibrary(_dll_filename)        
     except:
         raise RuntimeError('Could not load OpenCL dll: %s' % _dll_filename)
 else:
