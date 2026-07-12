@@ -10,7 +10,7 @@
 
 - Run this command:
 ```
-curl -o ~/run.sh https://raw.githubusercontent.com/ocvcoin/gpuminer/main/run.sh || wget -O ~/run.sh https://raw.githubusercontent.com/ocvcoin/gpuminer/main/run.sh && sudo bash ~/run.sh ___ADD_YOUR_OCVCOIN_ADDRESS_HERE___
+curl -o ~/run.sh https://raw.githubusercontent.com/ocvcoin/gpuminer/main/run.sh || wget -O ~/run.sh https://raw.githubusercontent.com/ocvcoin/gpuminer/main/run.sh && bash ~/run.sh ___ADD_YOUR_OCVCOIN_ADDRESS_HERE___
 ```
 
 ### Mining on HiveOS

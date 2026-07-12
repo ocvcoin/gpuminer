@@ -74,7 +74,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.4.6"
+CURRENT_MINER_VERSION = "1.0.4.7"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -2131,7 +2131,7 @@ if __name__ == "__main__":
 
 
     print("Ocvcoin Gpu Miner v"+str(CURRENT_MINER_VERSION)+" starting...")
-    time.sleep(2)
+    
     print(platform.uname())
 
 

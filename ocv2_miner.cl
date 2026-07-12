@@ -1,12 +1,6 @@
 
 
-#ifdef cl_khr_fp64
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#elif defined(cl_amd_fp64)
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#else
-#error "Double precision floating point not supported by OpenCL implementation."
-#endif
+
 
 inline uint SWAP(uint val) {
   return (rotate(((val)&0x00FF00FF), 24U) | rotate(((val)&0xFF00FF00), 8U));
@@ -4755,12 +4749,12 @@ __kernel void search_hash(
     for ( int i = 0; i < 1728; i++) local_init_image[i] = tmp_arr2[i];
 
      int d = 15;
-     double sigma_color = 75;
-     double sigma_space = 75;
+     float sigma_color = 75;
+     float sigma_space = 75;
      int cn = 3;
      int i, j;
-     double gauss_color_coeff = -0.5 / (sigma_color * sigma_color);
-     double gauss_space_coeff = -0.5 / (sigma_space * sigma_space);
+     float gauss_color_coeff = -0.5 / (sigma_color * sigma_color);
+     float gauss_space_coeff = -0.5 / (sigma_space * sigma_space);
 
     radius = d / 2;
 
@@ -4773,7 +4767,7 @@ __kernel void search_hash(
       j = -radius;
 
       for (; j <= radius; j++) {
-        double r = sqrt((__private double)i * i + (__private double)j * j);
+        float r = sqrt((__private float)i * i + (__private float)j * j);
         if (r > radius) continue;
         space_weight[maxk] = (__private float)exp(r * r * gauss_space_coeff);
 
