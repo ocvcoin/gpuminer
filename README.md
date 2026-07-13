@@ -4,7 +4,7 @@
 
 ### Mining on Windows
 
-- Download and Install Ocvcoin GPU Miner for Windows: <https://github.com/ocvcoin/windows_gpuminer/releases/download/v1.0.0.0/ocvcoin-gpuminer-1.0.0.0-setup.exe>
+- Download and Install Ocvcoin GPU Miner for Windows: <https://github.com/ocvcoin/windows_gpuminer/releases/download/v1.0.1.0/ocvcoin-gpuminer-1.0.1.0-setup.exe>
 
 ### Mining on Ubuntu, Debian, MacOS
 
