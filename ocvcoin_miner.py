@@ -74,7 +74,7 @@ from test_framework.messages import (
 
 
 
-CURRENT_MINER_VERSION = "1.0.4.7"
+CURRENT_MINER_VERSION = "1.0.4.8"
 
 ## OUR PUBLIC RPC
 OCVCOIN_PUBLIC_RPC_URL = "https://rpc.ocvcoin.com/OpenRPC.php"
@@ -2522,7 +2522,14 @@ if __name__ == "__main__":
             if selected_mining_method > len(mining_methods_list) or selected_mining_method < 1:
                 print("invalid method number!")
                 sys.exit()
-        
+
+
+
+    #Temporarily added! All pools closed! We have no pools left!            
+    if selected_mining_method < 5:
+        if HOSTPORT_ARR[0] == "pool.auto.select" or HOSTPORT_ARR[0] == "solo-pool.auto.select" or "phalanxmine" in HOSTPORT_ARR[0] or "mining4people" in HOSTPORT_ARR[0]:
+            selected_mining_method = 5
+            print("WARNING: mining4people and phalanxmine are no longer available! We are selecting our default rpc...\n")
     
     if selected_mining_method < 5:
     
